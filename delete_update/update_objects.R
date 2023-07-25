@@ -3,19 +3,26 @@ library(tidyverse)
 library(nbastatR)
 library(here)
 library(snakecase)
-source(here("data", "dataHub.R"))
+library(DBI)
+source(here("data_hub.R"))
+
+
+# Constants ---------------------------------------------------------------
+
+current_season <- 2024
 
 
 # player_game_log** ---------------------------------------------------------
-
-# Update schedule:
-  # daily
+# Update schedule: daily
 # Update instructions:
   # request only latest season
   # union with existing database table
   # drop duplicates
+
+og_player_game_log <- dh_getQuery(postgre_nba_con, "SELECT * FROM nba.player_game_log")
+
 player_game_log <- 
-  map_dfr(2010:2023, ~{
+  map_dfr(current_season, ~{
     game_logs(
       seasons = .x,
       season_types = c("Regular Season", "Playoffs", "Pre Season", "All Star"),
@@ -23,7 +30,15 @@ player_game_log <-
     )
   }) |> 
   select(-starts_with("url")) |> 
-  rename_with(to_snake_case)
+  rename_with(to_snake_case) |> 
+  bind_rows(og_player_game_log) |> 
+  group_by(year_season, id_game, id_player) |> 
+  slice_max(order_by = is_b2b, with_ties = FALSE)
+
+DBI::dbAppendTable()
+
+# Residual object created for some reason
+rm(df_nba_player_dict, og_player_game_log)
 
 
 # league_game_schedule** ----------------------------------------------------
@@ -36,7 +51,7 @@ player_game_log <-
   # union with existing database table
   # drop duplicates
 league_game_schedule <- 
-  map_dfr(2010:2023, ~ {
+  map_dfr(current_season, ~ {
     seasons_schedule(
       seasons = .x,
       season_types = c("Regular Season", "Playoffs", "Pre Season", "All Star")
@@ -55,26 +70,15 @@ league_game_schedule <-
   # groupby playerId
   # slice_max on lastSeason
   # drop duplicates
-# error_players <- c("Jeff Adrien", "David Andersen","Gustavo Ayon", "Ibou Badji", "Amari Bailey", "Ernie Barrett")
+
+
 safe_func <- safely(\(x) player_profiles(player_ids = x), quiet = FALSE)
-p_data <- janitor::remove_empty(nba_players()[4501:5000, ], which = "rows")
 
 player_info_x <- 
-  p_data$idPlayer |> 
-  map(~ safe_func(.x))
-
-# player_info_ls <- player_info_x
-# player_info_ls <- append(player_info_ls, player_info_x)
-
-# player_info_x <- map_dfr(player_info_ls[1:5000], ~ .x[["result"]])
-# err_players <- setdiff(nba_players()$idPlayer, player_info_x$idPlayer)
-# 
-# player_info <- 
-#   filter(nba_players(), idPlayer %in% err_players) |> 
-#   select(any_of(names(player_info_x))) |> 
-#   bind_rows(player_info_x) |> 
-#   select(-starts_with("url")) |>
-#   rename_with(to_snake_case)
+  p_data$idPlayer |> # ids of new and existing players (exclude old players)
+  map(~ safe_func(.x)) |> 
+  select(-starts_with("url")) |>
+  rename_with(to_snake_case)
 
 
 # player_season_stats** -----------------------------------------------------
@@ -88,7 +92,7 @@ player_info_x <-
   # slice max
   # drop duplicates
 player_season_stats <- 
-  map_dfr(2010:2023, ~{
+  map_dfr(current_season, ~{
     bref_players_stats(
       seasons = .x,
       tables = "totals",
@@ -106,7 +110,7 @@ player_season_stats <-
   # There forward, only if a franchise changes
 # Update instructions (if franchise changes):
   # replace existing database table
-teams <- nba_teams_seasons() |> 
+teams <- nba_teams_seasons() |>
   rename_with(to_snake_case)
 
 
@@ -120,13 +124,10 @@ teams <- nba_teams_seasons() |>
   # union with existing database table
   # drop duplicates
   # if player has been traded, flag old record for corresponding season
-team_roster_x <- 
+team_roster <- 
   # update with years manually
-  map_dfr(2010:2023, ~ teams_rosters(seasons = .x)) |>
+  map_dfr(current_season, ~ teams_rosters(seasons = .x)) |>
   rename_with(to_snake_case)
-
-# team_roster <- team_roster_x
-team_roster <- bind_rows(team_roster, team_roster_x)
 
 # tag players with original team prior trade before ingest
 # Only need to do this once (if tables remain being updated correctly)
@@ -139,6 +140,7 @@ traded <- filter(team_roster, str_detect(how_acquired, "^Trade")) |>
 
 team_roster <- bind_rows(team_roster, traded) |> 
   arrange(year_season, id_team, name_player)
+
 
 # injuries** ----------------------------------------------------------------
 

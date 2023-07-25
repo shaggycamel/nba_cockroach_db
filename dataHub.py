@@ -1,0 +1,269 @@
+
+import configparser
+import snakecase
+import espn_api.basketball as bb
+from os import getcwd
+from pathlib import Path
+from requests import get
+from datetime import datetime, date, timedelta
+from pandas import DataFrame, concat, read_sql_query, to_datetime
+from sqlalchemy import create_engine
+from importlib.machinery import SourceFileLoader
+
+from nba_api.stats.endpoints import playercareerstats, commonplayerinfo, playergamelog, leaguegamelog, commonteamroster
+from nba_api.stats.static import players, teams
+from nba_api.stats.library.parameters import Season
+
+# Constants
+timeout = 3600 + 600 # 1hour & 10mins
+active_players_list = DataFrame(players.get_active_players())['id'].to_list()
+nba_teams = DataFrame(teams.get_teams())
+
+
+class dataHub:
+    
+    def __init__(self):
+        self
+        
+    def db_connect(self, platform):
+        """ Establish connection to desired platform """
+        parser = configparser.ConfigParser()
+        parser.read(getcwd() + '/database.ini')
+        db_creds = dict(parser.items(platform))
+        sql_url = 'dialect://user:password@host:port/database'
+        for el in db_creds: sql_url = sql_url.replace(el, db_creds[el])
+
+        return create_engine(sql_url)
+        
+#### NBA API calls
+
+#     def nba_api(self, module, db_connection):
+#         """ Call files in directory 'nba_api_calls' """
+        
+#         mod = SourceFileLoader('get_' + module, 'nba_api_calls/' + module + '.py').load_module()
+#         func = getattr(mod, 'get_' + module)
+#         func(db_connection)
+
+    def get_player_season_stats(self, db_connection):
+        """ Season stats (totals) """
+
+        col_order = read_sql_query("SELECT column_name FROM util.table_column_order WHERE table_name = 'player_season_stats' ORDER BY column_order", db_connection)['column_name'].to_list()
+
+        print('\n--------------------- player season stats')
+        df = DataFrame()
+        for player in active_players_list:
+            player_season = playercareerstats.PlayerCareerStats(player_id=str(player))
+            player_season = player_season.data_sets[0].get_data_frame()
+            df = concat([df, player_season], ignore_index=True)
+            ix = active_players_list.index(player)
+            if ix % 50 == 0: print('player:', ix, '/', len(active_players_list))
+        print('player:', ix, '/', len(active_players_list))
+
+        # Clean up for ingestion into database
+        df = df.rename(snakecase.convert, axis='columns')
+        df = df[col_order]
+
+        # Combine with existing dataset & take record, per player, with most minutes per season
+        df_t = read_sql_query('SELECT * FROM nba.player_season_stats', db_connection)
+        df_t = concat([df, df_t], ignore_index=True)
+        df = (df_t
+              .groupby(['season_id', 'player_id'], as_index=False)
+              .apply(lambda x : x.sort_values(by = 'min', ascending = False).head(1))
+              .reset_index(drop = True))
+
+        # Write to database
+#         df.to_sql('player_season_stats', db_connection, schema='nba', index=False, if_exists='replace')
+        print('player_season_stats has been updated')
+        return df # Eventually delete
+        
+        
+    def get_player_info(self, db_connection):
+
+        col_order = read_sql_query("SELECT column_name FROM util.table_column_order WHERE table_name = 'player_info' ORDER BY column_order", db_connection)['column_name'].to_list()
+
+        print('\n--------------------- player_info')
+        df = DataFrame()
+        for player in active_players_list:
+            player_info = commonplayerinfo.CommonPlayerInfo(player_id=str(player))
+            player_info = player_info.data_sets[0].get_data_frame()
+            df = concat([df, player_info], ignore_index=True)
+            ix = active_players_list.index(player)
+            if ix % 50 == 0: print('player:', ix, '/', len(active_players_list))
+        print('player:', ix, '/', len(active_players_list))
+
+        # Clean up for ingestion into database
+        player_info['HEIGHT'] = player_info['HEIGHT'].str.replace('-', '.').astype('float')
+        player_info['WEIGHT'] = player_info['WEIGHT'].astype('int')
+        df = df.rename(snakecase.convert, axis='columns')
+        df = df[col_order]
+
+        # Write to database
+#         df.to_sql('player_info', db_connection, schema='nba', index=False, if_exists='replace')
+        print('player_info has been updated')
+        return df # Eventually delete
+        
+        
+    def get_player_game_log(self, db_connection):
+
+        col_order = read_sql_query("SELECT column_name FROM util.table_column_order WHERE table_name = 'player_game_log' ORDER BY column_order", db_connection)['column_name'].to_list()
+
+        date_from = read_sql_query('SELECT MAX(date_game) FROM nba.player_game_log', db_connection)['max'][0]
+        date_from = (date_from + timedelta(days=1)).strftime('%m/%d/%Y')
+        date_to = (date.today() - timedelta(days=2)).strftime('%m/%d/%Y')
+
+        # Connect to API and collect data
+        print('\n--------------------- player_game_log')
+        df = DataFrame() 
+        for player in active_players_list:
+            for season_type in ['Regular Season', 'Pre Season', 'Playoffs', 'All Star', 'All-Star']:
+                player_game_log = playergamelog.PlayerGameLog(
+                    player_id=str(player), 
+                    date_from_nullable=date_from, 
+                    date_to_nullable=date_to,
+                    season_type_all_star=season_type
+                )
+                player_game_log = player_game_log.data_sets[0].get_data_frame()
+                player_game_log['season_type'] = season_type
+                df = concat([df, player_game_log], ignore_index=True)
+            ix = active_players_list.index(player)
+            if ix % 50 == 0: print('player:', ix, '/', len(active_players_list))
+        print('player:', ix, '/', len(active_players_list))
+
+        # Clean up for ingestion into database
+        df['GAME_DATE'] = to_datetime(df['GAME_DATE'])
+        df['year_season'] = Season.current_season_year
+        df['slug_season'] = Season.current_season
+        df = df.rename(snakecase.convert, axis='columns')
+        df = df[col_order]
+
+        # Write to database
+#         df.to_sql('player_game_log', db_connection, schema='nba', index=False, if_exists='append')
+        print('player_game_log has been updated to:', datetime.strptime(date_to, '%m/%d/%Y').strftime('%Y-%m-%d'))
+        return df # Eventually delete
+        
+        
+    
+    def get_next_game_schedule(self, db_connection):
+        
+        col_order = read_sql_query("SELECT column_name FROM util.table_column_order WHERE table_name = 'league_game_schedule' ORDER BY column_order", db_connection)['column_name'].to_list()
+
+        # data request
+        request = get(f'https://data.nba.com/data/10s/v2015/json/mobile_teams/nba/{Season.current_season_year}/league/00_full_schedule_week_tbds.json')
+
+        # Dataframe object to be added to
+        df = DataFrame()
+
+        # Loop through month elements
+        for month in request.json()['lscd']:
+            df_row = DataFrame(month['mscd']['g'])[['gid', 'gdte', 'an', 'ac', 'htm', 'vtm', 'v', 'h']]
+
+            # Obtain home and away team info
+            for col in ['h', 'v']:
+                df_col = DataFrame([[el['tid'], el['ta']] for el in df_row[col]])
+                df_col.columns = ['home_team_id', 'home_team_slug'] if col == 'h' else ['away_team_id', 'away_team_slug']
+                df_row = concat([df_row, df_col], axis = 1)
+
+            # Rename columns
+            df_row = df_row.drop(columns=['v', 'h'])
+            df_row = df_row.rename(columns={'gid':'game_id', 'gdte':'game_date', 'an':'arena', 'ac':'city', 'htm':'home_team_time', 'vtm':'away_team_time'})
+
+            # Collate data
+            df = concat([df, df_row], ignore_index=True)
+
+        # Cast date columns to_date & Create new columns
+        df[['game_date', 'home_team_time', 'away_team_time']] = df[['game_date', 'home_team_time', 'away_team_time']].apply(to_datetime) 
+        df['type_season'] = None
+        df['slug_season'] = Season.current_season
+        df['slug_matchup'] = df['home_team_slug'] + ' vs. ' + df['away_team_slug']
+        df['slug_team_winner'] = None
+        df['slug_team_loser'] = None
+        df['number_game_day'] = None
+        df = df[col_order]
+
+        # Write to database
+#         df.to_sql('league_game_schedule', db_connection, schema='nba', index=False, if_exists='append')
+        print('current_game_schedule has been updated')
+        return df # Eventually delete
+
+    
+    def udpate_historical_game_schedule(self, db_connection):
+        ##### NEEDS WORK
+        print('\n--------------------- historical_league_game_schedule')
+        df = pd.DataFrame() 
+        for season_type in ['Regular Season', 'Pre Season', 'Playoffs', 'All Star', 'All-Star']:
+            hist_game_schedule = leaguegamelog.LeagueGameLog(season_type_all_star=season_type, season=Season.current_season_year-1)
+            hist_game_schedule = hist_game_schedule.get_data_frames()[0]
+            hist_game_schedule['season_type'] = season_type
+            df = pd.concat([d, hist_game_schedule], ignore_index=True)
+            
+        # Write to database
+#         df.to_sql('historical_game_schedule', db_connection, schema='nba', index=False, if_exists='append')
+        print('historical_game_schedule has been updated')
+    
+    
+
+    def get_team_roster(self, db_connection):
+
+        col_order = read_sql_query("SELECT column_name FROM util.table_column_order WHERE table_name = 'team_roster' ORDER BY column_order", db_connection)['column_name'].to_list()
+        
+        print('\n--------------------- commonteamroster')
+        df = pd.DataFrame()
+        for team in nba_teams['id'].to_list():
+            common_teamroster = commonteamroster.CommonTeamRoster(season=Season.current_season_year, team_id=team)
+            common_teamroster = common_teamroster.get_data_frames()[0]
+            df = pd.concat([df, common_teamroster], ignore_index=True)
+        
+        df = df.merge(
+            nba_teams[['id', 'abbreviation']].rename(columns={'id': 'TeamID', 'abbreviation': 'team_slug'}), 
+            on=['TeamID'],
+            how = 'left'
+        ).rename(snakecase.convert, axis='columns')[col_order]
+
+        # ADD DATA TO CONTROL FOR PLAYERS BEING TRADED
+    
+        # Write to database
+#         df.to_sql('team_roster', db_connection, schema='nba', index=False, if_exists='append')
+        print('historical_game_schedule has been updated')
+
+
+
+        
+        
+          
+    def fty_api_cxn(self):
+        """ Create connection object to fanstasy api """
+        
+        parser = configparser.ConfigParser()
+        parser.read(str(Path(getcwd()).parents[0]) + '/database.ini')
+        fty_creds = dict(parser.items(parser.sections()[1]))
+        
+        return bb.League(
+            league_id=int(fty_creds['league_id']),
+            year=int(fty_creds['year']),
+            espn_s2=fty_creds['espn_s2'], 
+            swid=fty_creds['swid']
+        )
+    
+    def fty_get_free_agents(self, players, postgres):
+        
+        df = []
+        for player in players:
+            df.append({
+                'player_id': player.playerId,
+                'player_name': player.name,
+                'player_team': player.proTeam,
+                'player_status': player.injuryStatus,
+                'player_position': player.position
+            }) 
+
+        # Clean in prep for database ingestion
+        df = DataFrame(df)
+        df['player_id'] = df['player_id'].astype('str')
+        
+        # Write to database
+        df.to_sql('free_agents', postgres, schema='fty', index=False, if_exists='replace')
+        print('free_agents has been updated')
+    
+    
+        
+        
