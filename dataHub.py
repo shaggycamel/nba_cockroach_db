@@ -107,7 +107,7 @@ class dataHub:
 
         col_order = read_sql_query("SELECT column_name FROM util.table_column_order WHERE table_name = 'player_game_log' ORDER BY column_order", db_connection)['column_name'].to_list()
 
-        date_from = read_sql_query('SELECT MAX(date_game) FROM nba.player_game_log', db_connection)['max'][0]
+        date_from = read_sql_query('SELECT MAX(game_date) FROM nba.player_game_log', db_connection)['max'][0]
         date_from = (date_from + timedelta(days=1)).strftime('%m/%d/%Y')
         date_to = (date.today() - timedelta(days=2)).strftime('%m/%d/%Y')
 
@@ -115,7 +115,7 @@ class dataHub:
         print('\n--------------------- player_game_log')
         df = DataFrame() 
         for player in active_players_list:
-            for season_type in ['Regular Season', 'Pre Season', 'Playoffs', 'All Star', 'All-Star']:
+            for season_type in ['Regular Season', 'Pre Season']: #, 'Playoffs', 'All Star', 'All-Star']:
                 player_game_log = playergamelog.PlayerGameLog(
                     player_id=str(player), 
                     date_from_nullable=date_from, 
@@ -140,7 +140,26 @@ class dataHub:
 #         df.to_sql('player_game_log', db_connection, schema='nba', index=False, if_exists='append')
         print('player_game_log has been updated to:', datetime.strptime(date_to, '%m/%d/%Y').strftime('%Y-%m-%d'))
         return df # Eventually delete
-        
+
+
+    def update_historical_game_schedule(self, db_connection):
+        ##### NEEDS WORK
+        print('\n--------------------- historical_league_game_schedule')
+        df = DataFrame() 
+        for season_type in ['Regular Season', 'Pre Season', 'Playoffs', 'All Star', 'All-Star']:
+            hist_game_schedule = leaguegamelog.LeagueGameLog(season_type_all_star=season_type, season=Season.current_season_year-1)
+            hist_game_schedule = hist_game_schedule.get_data_frames()[0]
+            hist_game_schedule['season_type'] = season_type
+            df = concat([df, hist_game_schedule], ignore_index=True)
+
+        # Combine with existing dataset replacing last seasons records
+        df_t = read_sql_query("SELECT * FROM nba.league_game_schedule WHERE slug_season < '{}'".format(Season.previous_season), db_connection)
+        df = concat([df, df_t], ignore_index=True)
+            
+        # Write to database
+#         df.to_sql('historical_game_schedule', db_connection, schema='nba', index=False, if_exists='replace')
+        print('historical_game_schedule has been updated')
+        return df # Eventaully delete
         
     
     def get_next_game_schedule(self, db_connection):
@@ -186,56 +205,47 @@ class dataHub:
         return df # Eventually delete
 
     
-    def udpate_historical_game_schedule(self, db_connection):
-        ##### NEEDS WORK
-        print('\n--------------------- historical_league_game_schedule')
-        df = pd.DataFrame() 
-        for season_type in ['Regular Season', 'Pre Season', 'Playoffs', 'All Star', 'All-Star']:
-            hist_game_schedule = leaguegamelog.LeagueGameLog(season_type_all_star=season_type, season=Season.current_season_year-1)
-            hist_game_schedule = hist_game_schedule.get_data_frames()[0]
-            hist_game_schedule['season_type'] = season_type
-            df = pd.concat([d, hist_game_schedule], ignore_index=True)
-            
-        # Write to database
-#         df.to_sql('historical_game_schedule', db_connection, schema='nba', index=False, if_exists='append')
-        print('historical_game_schedule has been updated')
-    
-    
-
     def get_team_roster(self, db_connection):
 
         col_order = read_sql_query("SELECT column_name FROM util.table_column_order WHERE table_name = 'team_roster' ORDER BY column_order", db_connection)['column_name'].to_list()
         
         print('\n--------------------- commonteamroster')
-        df = pd.DataFrame()
+        df = DataFrame()
         for team in nba_teams['id'].to_list():
             common_teamroster = commonteamroster.CommonTeamRoster(season=Season.current_season_year, team_id=team)
             common_teamroster = common_teamroster.get_data_frames()[0]
-            df = pd.concat([df, common_teamroster], ignore_index=True)
+            df = concat([df, common_teamroster], ignore_index=True)
+            ix = nba_teams['id'].to_list().index(team)
+            if ix % 5 == 0: print('team:', ix, '/', len(nba_teams['id'].to_list()))
+        print('team:', ix, '/', len(nba_teams['id'].to_list()))
         
         df = df.merge(
             nba_teams[['id', 'abbreviation']].rename(columns={'id': 'TeamID', 'abbreviation': 'team_slug'}), 
             on=['TeamID'],
             how = 'left'
-        ).rename(snakecase.convert, axis='columns')[col_order]
+        )
+        df = df.rename(snakecase.convert, axis='columns')
+        df['slug_season'] = Season.current_season
+        df = df[col_order]
 
         # ADD DATA TO CONTROL FOR PLAYERS BEING TRADED
     
         # Write to database
 #         df.to_sql('team_roster', db_connection, schema='nba', index=False, if_exists='append')
         print('historical_game_schedule has been updated')
+        return df # evetually delte
 
 
 
         
         
           
-    def fty_api_cxn(self):
+    def fty_api_con(self):
         """ Create connection object to fanstasy api """
         
         parser = configparser.ConfigParser()
-        parser.read(str(Path(getcwd()).parents[0]) + '/database.ini')
-        fty_creds = dict(parser.items(parser.sections()[1]))
+        parser.read(getcwd() + '/database.ini')
+        fty_creds = dict(parser.items('fantasy_api'))
         
         return bb.League(
             league_id=int(fty_creds['league_id']),
@@ -258,11 +268,15 @@ class dataHub:
 
         # Clean in prep for database ingestion
         df = DataFrame(df)
-        df['player_id'] = df['player_id'].astype('str')
         
         # Write to database
-        df.to_sql('free_agents', postgres, schema='fty', index=False, if_exists='replace')
+        # df.to_sql('free_agents', postgres, schema='fty', index=False, if_exists='replace')
         print('free_agents has been updated')
+        return df # Eventually delete
+
+
+    def fty_get_team_rosters(self, players, postgres):
+        pass
     
     
         
