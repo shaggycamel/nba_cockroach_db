@@ -1,0 +1,8 @@
+pandas
+datetime
+requests
+sqlalchemy
+snakecase
+psycopg2-binary
+espn_api
+nba_api
