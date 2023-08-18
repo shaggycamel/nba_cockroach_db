@@ -1,8 +1,8 @@
-pandas
-datetime
-requests
-sqlalchemy
-snakecase
-psycopg2-binary
-espn_api
-nba_api
+pandas == 2.0.3
+datetime == 5.2
+requests == 2.31.0
+sqlalchemy == 2.0.19
+snakecase == 1.0.1
+psycopg2-binary == 2.9.6
+espn_api == 0.30.0
+nba_api == 1.2.1

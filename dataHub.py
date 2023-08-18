@@ -110,12 +110,14 @@ class dataHub:
         date_from = read_sql_query('SELECT MAX(game_date) FROM nba.player_game_log', db_connection)['max'][0]
         date_from = (date_from + timedelta(days=1)).strftime('%m/%d/%Y')
         date_to = (date.today() - timedelta(days=2)).strftime('%m/%d/%Y')
+        season_types = read_sql_query("SELECT * FROM util.key_dates WHERE begin_date <= '{}' AND end_date >= '{}'".format(date_from, date_to), db_connection)
+        season_types = season_types[['season_type']]
 
         # Connect to API and collect data
         print('\n--------------------- player_game_log')
         df = DataFrame() 
         for player in active_players_list:
-            for season_type in ['Regular Season', 'Pre Season']: #, 'Playoffs', 'All Star', 'All-Star']:
+            for season_type in season_types:
                 player_game_log = playergamelog.PlayerGameLog(
                     player_id=str(player), 
                     date_from_nullable=date_from, 
@@ -142,7 +144,7 @@ class dataHub:
         return df # Eventually delete
 
 
-    def update_historical_game_schedule(self, db_connection):
+    def update_past_game_schedule(self, db_connection):
         ##### NEEDS WORK
         print('\n--------------------- historical_league_game_schedule')
         df = DataFrame() 
