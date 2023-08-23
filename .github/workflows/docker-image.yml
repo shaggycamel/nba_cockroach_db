@@ -10,4 +10,4 @@ jobs:
         runs-on: ubuntu-latest
         steps:
           - name: Run the build process with Docker
-            uses: docker://shaggycamel/nba_cockroach_db
+            uses: docker://shaggycamel/nba_cockroach_db:obtain-data
