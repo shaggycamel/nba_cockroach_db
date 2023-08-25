@@ -2,7 +2,7 @@
 #### ignore custom files
 
 # Database config file
-database.ini
+# database.ini
 
 
 ##### ignore R files
