@@ -13,6 +13,9 @@ from importlib.machinery import SourceFileLoader
 from nba_api.stats.endpoints import playercareerstats, commonplayerinfo, playergamelog, leaguegamelog, commonteamroster
 from nba_api.stats.static import players, teams
 from nba_api.stats.library.parameters import Season
+import pro_sports_transactions as pst
+import asyncio
+import nest_asyncio; nest_asyncio.apply() # needed for running code in jupyter
 
 # Constants
 timeout = 3600 + 600 # 1hour & 10mins
@@ -238,8 +241,41 @@ class dataHub:
         return df # evetually delte
 
 
+# TRANSACTIONS
+    def get_transactions(self, db_connection):
 
+        col_order = read_sql_query("SELECT column_name FROM util.table_column_order WHERE table_name = 'transaction_log' ORDER BY column_order", db_connection)['column_name'].to_list()
+
+        async def search_transactions(starting_row, transaction_type) -> str:
+            return await pst.Search(
+                league = pst.League.NBA,
+                transaction_types = [transaction_type], # Needs to list, hence []
+                start_date = read_sql_query('SELECT MAX(date) FROM nba.transaction_log', db_connection)['max'][0],
+                end_date = date.today(),
+                starting_row = starting_row
+            ).get_dict()
         
+        df = DataFrame()
+        pst_page = asyncio.get_event_loop()
+        for t_t in pst.TransactionType:
+            pages = pst_page.run_until_complete(search_transactions(0, t_t))['pages']
+            
+            for page in range(pages):
+                df_t = pst_page.run_until_complete(search_transactions(page * 25, t_t))
+                df_t = DataFrame(df_t['transactions'])
+                df_t['transaction_type'] = t_t.name
+                df = concat([df, df_t], axis=0, ignore_index=True)
+        
+        df['acc_req'] = ['Acquired' if len(row[1]['Relinquished'])==0 else 'Relinquished' for row in df.iterrows()]
+        df['player'] = [row[1]['Acquired'] if len(row[1]['Relinquished'])==0 else row[1]['Relinquished'] for row in df.iterrows()]
+        df['player'] = df['player'].str.removeprefix('• ')
+        df.columns = df.columns.str.lower()
+        df = df[col_order]
+        
+        # Write to database
+#         df.to_sql('transaction_log', db_connection, schema='nba', index=False, if_exists='append')
+        print('transaction_log has been updated')
+        return df # evetually delte      
         
           
     def fty_api_con(self):
