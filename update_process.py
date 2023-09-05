@@ -4,7 +4,7 @@ from sqlalchemy.dialects.postgresql.base import PGDialect; PGDialect._get_server
 from dataHub import dataHub
 dh = dataHub()
 
-db_connection = dh.db_connect('postgre')
+db_connection = dh.db_connect('cockroach')
 fty_con = dh.fty_api_con()
 
 dh.get_player_season_stats(db_connection)
