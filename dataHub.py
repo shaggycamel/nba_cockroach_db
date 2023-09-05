@@ -107,6 +107,7 @@ class dataHub:
         
         
     def get_player_game_log(self, db_connection):
+        # NEED TO UPDATE KEY DATES WITH LATEST DATES IN ORDER FOR SEASON TYPE TO BE CORRECT
 
         col_order = read_sql_query("SELECT column_name FROM util.table_column_order WHERE table_name = 'player_game_log' ORDER BY column_order", db_connection)['column_name'].to_list()
 
@@ -115,6 +116,7 @@ class dataHub:
         date_to = (date.today() - timedelta(days=2)).strftime('%m/%d/%Y')
         season_types = read_sql_query("SELECT * FROM util.key_dates WHERE begin_date <= '{}' AND end_date >= '{}'".format(date_from, date_to), db_connection)
         season_types = season_types[['season_type']]
+        if len(season_types)==0: season_types = ['Pre Season']
 
         # Connect to API and collect data
         print('\n--------------------- player_game_log')
@@ -243,14 +245,16 @@ class dataHub:
 
 # TRANSACTIONS
     def get_transactions(self, db_connection):
-
+        # NEED TO COERCE DATE TO "DATE" BEOFRE INGESTION
+        print('\n--------------------- transactions')
         col_order = read_sql_query("SELECT column_name FROM util.table_column_order WHERE table_name = 'transaction_log' ORDER BY column_order", db_connection)['column_name'].to_list()
+        date_from = read_sql_query('SELECT MAX(date) FROM nba.transaction_log', db_connection)['max'][0] - timedelta(days=4) # four days leway, unless records are added late
 
         async def search_transactions(starting_row, transaction_type) -> str:
             return await pst.Search(
                 league = pst.League.NBA,
                 transaction_types = [transaction_type], # Needs to list, hence []
-                start_date = read_sql_query('SELECT MAX(date) FROM nba.transaction_log', db_connection)['max'][0],
+                start_date = date_from,
                 end_date = date.today(),
                 starting_row = starting_row
             ).get_dict()
@@ -259,7 +263,8 @@ class dataHub:
         pst_page = asyncio.get_event_loop()
         for t_t in pst.TransactionType:
             pages = pst_page.run_until_complete(search_transactions(0, t_t))['pages']
-            
+            print(t_t, '-', pages)
+
             for page in range(pages):
                 df_t = pst_page.run_until_complete(search_transactions(page * 25, t_t))
                 df_t = DataFrame(df_t['transactions'])
@@ -270,9 +275,13 @@ class dataHub:
         df['player'] = [row[1]['Acquired'] if len(row[1]['Relinquished'])==0 else row[1]['Relinquished'] for row in df.iterrows()]
         df['player'] = df['player'].str.removeprefix('• ')
         df.columns = df.columns.str.lower()
+        df['date'] = to_datetime(df['date'])
         df = df[col_order]
         
         # Write to database
+        df_t = read_sql_query("SELECT * FROM nba.transaction_log WHERE date >= '{}'".format(date_from), db_connection)
+        df = concat([df, df_t], axis=0, ignore_index=True)
+        df = df[~df.duplicated(keep = False)].reset_index(drop=True)
 #         df.to_sql('transaction_log', db_connection, schema='nba', index=False, if_exists='append')
         print('transaction_log has been updated')
         return df # evetually delte      

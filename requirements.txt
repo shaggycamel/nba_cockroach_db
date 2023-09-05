@@ -4,5 +4,9 @@ requests == 2.31.0
 sqlalchemy == 2.0.19
 snakecase == 1.0.1
 psycopg2-binary == 2.9.6
-espn_api == 0.30.0
-nba_api == 1.2.1
+espn-api == 0.30.0
+nba-api == 1.2.1
+pro-sports-transactions == 1.0.0
+async-lru == 2.0.3
+async-timeout == 4.0.3
+nest-asyncio == 1.5.6
