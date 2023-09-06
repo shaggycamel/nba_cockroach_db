@@ -5,7 +5,7 @@ from dataHub import dataHub
 dh = dataHub()
 
 db_connection = dh.db_connect('postgre')
-fty_con = dh.fty_api_con()
+# fty_con = dh.fty_api_con()
 
 dh.get_player_season_stats(db_connection)
 dh.get_player_info(db_connection)
@@ -14,4 +14,4 @@ dh.update_past_game_schedule(db_connection)
 dh.get_next_game_schedule(db_connection)
 dh.get_team_roster(db_connection)
 dh.get_transactions(db_connection)
-dh.fty_get_free_agents(fty_con.free_agents(size=1000), db_connection)
+# dh.fty_get_free_agents(fty_con.free_agents(size=1000), db_connection)
