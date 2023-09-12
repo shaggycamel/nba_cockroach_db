@@ -6,6 +6,7 @@ from os import getcwd
 from pathlib import Path
 from requests import get
 from datetime import datetime, date, timedelta
+from time import sleep
 from pandas import DataFrame, concat, read_sql_query, to_datetime
 from sqlalchemy import create_engine
 from importlib.machinery import SourceFileLoader
@@ -16,6 +17,11 @@ from nba_api.stats.library.parameters import Season
 import pro_sports_transactions as pst
 import asyncio
 import nest_asyncio; nest_asyncio.apply() # needed for running code in jupyter
+
+# Proxy setup
+from proxy_randomizer import RegisteredProviders
+rp = RegisteredProviders()
+rp.parse_providers()
 
 # Constants
 timeout = 3600 + 600 # 1hour & 10mins
@@ -55,11 +61,16 @@ class dataHub:
         print('\n--------------------- player season stats')
         df = DataFrame()
         for player in active_players_list:
-            player_season = playercareerstats.PlayerCareerStats(player_id=str(player))
+            player_season = playercareerstats.PlayerCareerStats(
+                player_id=str(player), 
+                timeout=timeout,
+            )
             player_season = player_season.data_sets[0].get_data_frame()
             df = concat([df, player_season], ignore_index=True)
             ix = active_players_list.index(player)
-            if ix % 50 == 0: print('player:', ix, '/', len(active_players_list))
+            if ix % 50 == 0: 
+                print('player:', ix, '/', len(active_players_list))
+            sleep(1)
         print('player:', ix, '/', len(active_players_list))
 
         # Clean up for ingestion into database
@@ -87,11 +98,13 @@ class dataHub:
         print('\n--------------------- player_info')
         df = DataFrame()
         for player in active_players_list:
-            player_info = commonplayerinfo.CommonPlayerInfo(player_id=str(player))
+            player_info = commonplayerinfo.CommonPlayerInfo(player_id=str(player), timeout=timeout)
             player_info = player_info.data_sets[0].get_data_frame()
             df = concat([df, player_info], ignore_index=True)
             ix = active_players_list.index(player)
-            if ix % 50 == 0: print('player:', ix, '/', len(active_players_list))
+            if ix % 50 == 0: 
+                print('player:', ix, '/', len(active_players_list))
+            sleep(1)
         print('player:', ix, '/', len(active_players_list))
 
         # Clean up for ingestion into database
@@ -116,7 +129,8 @@ class dataHub:
         date_to = (date.today() - timedelta(days=2)).strftime('%m/%d/%Y')
         season_types = read_sql_query("SELECT * FROM util.key_dates WHERE begin_date <= '{}' AND end_date >= '{}'".format(date_from, date_to), db_connection)
         season_types = season_types[['season_type']]
-        if len(season_types)==0: season_types = ['Pre Season']
+        if len(season_types)==0: 
+            season_types = ['Pre Season']
 
         # Connect to API and collect data
         print('\n--------------------- player_game_log')
@@ -127,13 +141,16 @@ class dataHub:
                     player_id=str(player), 
                     date_from_nullable=date_from, 
                     date_to_nullable=date_to,
-                    season_type_all_star=season_type
+                    season_type_all_star=season_type, 
+                    timeout=timeout
                 )
                 player_game_log = player_game_log.data_sets[0].get_data_frame()
                 player_game_log['season_type'] = season_type
                 df = concat([df, player_game_log], ignore_index=True)
             ix = active_players_list.index(player)
-            if ix % 50 == 0: print('player:', ix, '/', len(active_players_list))
+            if ix % 50 == 0: 
+                print('player:', ix, '/', len(active_players_list))
+            sleep(1)
         print('player:', ix, '/', len(active_players_list))
 
         # Clean up for ingestion into database
@@ -154,10 +171,11 @@ class dataHub:
         print('\n--------------------- historical_league_game_schedule')
         df = DataFrame() 
         for season_type in ['Regular Season', 'Pre Season', 'Playoffs', 'All Star', 'All-Star']:
-            hist_game_schedule = leaguegamelog.LeagueGameLog(season_type_all_star=season_type, season=Season.current_season_year-1)
+            hist_game_schedule = leaguegamelog.LeagueGameLog(season_type_all_star=season_type, season=Season.current_season_year-1, timeout=timeout)
             hist_game_schedule = hist_game_schedule.get_data_frames()[0]
             hist_game_schedule['season_type'] = season_type
             df = concat([df, hist_game_schedule], ignore_index=True)
+            sleep(1)
 
         # Combine with existing dataset replacing last seasons records
         df_t = read_sql_query("SELECT * FROM nba.league_game_schedule WHERE slug_season < '{}'".format(Season.previous_season), db_connection)
@@ -219,11 +237,13 @@ class dataHub:
         print('\n--------------------- commonteamroster')
         df = DataFrame()
         for team in nba_teams['id'].to_list():
-            common_teamroster = commonteamroster.CommonTeamRoster(season=Season.current_season_year, team_id=team)
+            common_teamroster = commonteamroster.CommonTeamRoster(season=Season.current_season_year, team_id=team, timeout=timeout)
             common_teamroster = common_teamroster.get_data_frames()[0]
             df = concat([df, common_teamroster], ignore_index=True)
             ix = nba_teams['id'].to_list().index(team)
-            if ix % 5 == 0: print('team:', ix, '/', len(nba_teams['id'].to_list()))
+            if ix % 5 == 0: 
+                print('team:', ix, '/', len(nba_teams['id'].to_list()))
+            sleep(1)
         print('team:', ix, '/', len(nba_teams['id'].to_list()))
         
         df = df.merge(
@@ -270,6 +290,7 @@ class dataHub:
                 df_t = DataFrame(df_t['transactions'])
                 df_t['transaction_type'] = t_t.name
                 df = concat([df, df_t], axis=0, ignore_index=True)
+                sleep(1)
         
         df['acc_req'] = ['Acquired' if len(row[1]['Relinquished'])==0 else 'Relinquished' for row in df.iterrows()]
         df['player'] = [row[1]['Acquired'] if len(row[1]['Relinquished'])==0 else row[1]['Relinquished'] for row in df.iterrows()]
@@ -301,7 +322,7 @@ class dataHub:
             swid=fty_creds['swid']
         )
     
-    def fty_get_free_agents(self, players, postgres):
+    def fty_get_free_agents(self, players, db_conection):
         
         df = []
         for player in players:
@@ -317,7 +338,7 @@ class dataHub:
         df = DataFrame(df)
         
         # Write to database
-        # df.to_sql('free_agents', postgres, schema='fty', index=False, if_exists='replace')
+        # df.to_sql('free_agents', db_conection, schema='fty', index=False, if_exists='replace')
         print('free_agents has been updated')
         return df # Eventually delete
 
