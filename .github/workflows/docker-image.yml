@@ -1,9 +1,9 @@
 name: Update Cockroach DB
 
 on:
-  push:
-  schedule:
-    - cron:  '0 3 * * *'
+  # push:
+  # schedule:
+  #   - cron:  '0 3 * * *'
 
 jobs:
     compile:
