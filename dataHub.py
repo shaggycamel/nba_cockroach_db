@@ -18,11 +18,6 @@ import pro_sports_transactions as pst
 import asyncio
 import nest_asyncio; nest_asyncio.apply() # needed for running code in jupyter
 
-# Proxy setup
-from proxy_randomizer import RegisteredProviders
-rp = RegisteredProviders()
-rp.parse_providers()
-
 # Constants
 timeout = 3600 + 600 # 1hour & 10mins
 active_players_list = DataFrame(players.get_active_players())['id'].to_list()
@@ -44,14 +39,6 @@ class dataHub:
 
         return create_engine(sql_url)
         
-#### NBA API calls
-
-#     def nba_api(self, module, db_connection):
-#         """ Call files in directory 'nba_api_calls' """
-        
-#         mod = SourceFileLoader('get_' + module, 'nba_api_calls/' + module + '.py').load_module()
-#         func = getattr(mod, 'get_' + module)
-#         func(db_connection)
 
     def get_player_season_stats(self, db_connection):
         """ Season stats (totals) """
@@ -265,7 +252,7 @@ class dataHub:
 
 # TRANSACTIONS
     def get_transactions(self, db_connection):
-        # NEED TO COERCE DATE TO "DATE" BEOFRE INGESTION
+
         print('\n--------------------- transactions')
         col_order = read_sql_query("SELECT column_name FROM util.table_column_order WHERE table_name = 'transaction_log' ORDER BY column_order", db_connection)['column_name'].to_list()
         date_from = read_sql_query('SELECT MAX(date) FROM nba.transaction_log', db_connection)['max'][0] - timedelta(days=4) # four days leway, unless records are added late

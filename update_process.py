@@ -1,48 +1,59 @@
 from pandas import DataFrame, read_sql_query
 from datetime import datetime
 from pytz import timezone
-from sqlalchemy.dialects.postgresql.base import PGDialect; PGDialect._get_server_version_info = lambda *args: (9, 2)
+from sqlalchemy.dialects.postgresql.base import PGDialect; PGDialect._get_server_version_info = lambda * args: (9, 2)
 from dataHub import dataHub
 
 dh = dataHub()
-db_connection = dh.db_connect('postgre')
-# db_connection = dh.db_connect('cockroach')
+# db_connection = dh.db_connect('postgre')
+db_connection = dh.db_connect('cockroach')
 fty_con = dh.fty_api_con()
 
-
-def custom_prelog(func, table_name):
-    table_name = table_name
-    timestamp = datetime.now(timezone('NZ'))
+# Custom function to handle logging events
+def custom_prelog(eval_string, table_name):
     try:
-        func()
+        eval(eval_string)
         success = True  
         error_message = None
     except Exception as e:
         success = False
         error_message = str(e)
+        print('--------------------- NOT UPDATED:', table_name)
     finally:
-        log_record = DataFrame(
-            data={'table_name': table_name, 'process_date': timestamp, 'successful_run': success, 'error_message': error_message}, 
+        DataFrame(
+            data = {
+                'table_name': table_name, 
+                'process_date': datetime.now(timezone('NZ')), 
+                'successful_run': success, 
+                'error_message': error_message
+            }, 
             index=[0]
-        )
-        log_record.to_sql('update_log', db_connection, schema='util', index=False, if_exists='append')
+        ).to_sql('update_log', db_connection, schema='util', index=False, if_exists='append')
+
+
+# Obtain update_schedule filtering on US Eastern Time
+us_eastern_time = datetime.now(timezone('US/Eastern')).strftime('%Y-%m-%d')
+us_eastern_time = '2023-10-06'  ### Eventually delete
+update_schedule = read_sql_query("SELECT * FROM util.update_schedule WHERE run_period_start <= '{}' AND run_period_end >= '{}'".format(us_eastern_time, us_eastern_time), db_connection)
+
+
+# Loop through update schedule and update objects accordingly
+for _, row in update_schedule.iterrows():
+
+    # Create evaluation string & handle functions that only need to be run weekly
+    eval_string = ''.join(['dh.', row['associated_function'], '(', row['function_arguments'], ')'])
+    if ((row[['update_schedule']].str.contains('weekly')[0]) and (datetime.now(timezone('NZ')).weekday() != 0)):
+        eval_string = None
+
+    if (eval_string is not None):
+        custom_prelog(eval_string, row['table_name'])
         
-        
 
-custom_prelog(lambda: dh.get_player_season_stats(db_connection), 'nba.player_season_stats')
-custom_prelog(lambda: dh.get_player_info(db_connection), 'nba.player_info')
-custom_prelog(lambda: dh.get_player_game_log(db_connection), 'nba.player_game_log')
-custom_prelog(lambda: dh.update_past_game_schedule(db_connection), 'nba.league_game_schedule/past')
-custom_prelog(lambda: dh.get_next_game_schedule(db_connection), 'nba.league_game_schedule/future')
-custom_prelog(lambda: dh.get_team_roster(db_connection), 'nba.team_roster')
-custom_prelog(lambda: dh.get_transactions(db_connection), 'nba.transaction_log')
-custom_prelog(lambda: dh.fty_get_free_agents(fty_con.free_agents(size=1000), db_connection), 'fty.free_agents')
-
-
-current_date = datetime.now(timezone('NZ')).strftime('%Y-%m-%d')
-failed_objects = read_sql_query("SELECT table_name FROM util.update_log WHERE successful_run = False AND process_date::DATE = '{}'".format(current_date), db_connection)
+# Print failed objects
+nz_date = datetime.now(timezone('NZ')).strftime('%Y-%m-%d')
+failed_objects = read_sql_query("SELECT table_name FROM util.update_log WHERE successful_run = 'false' AND process_date::DATE = '{}'".format(nz_date), db_connection)
 
 if len(failed_objects) > 0:
-    raise Exception(print(current_date, '\nFailed objects:', failed_objects['table_name'].to_list()))
+    raise Exception(print(nz_date, '\nFailed objects:', failed_objects['table_name'].to_list()))
 else:
-    print(current_date, '\nAll tables successfully updated.')
+    print(nz_date, '\nAll tables successfully updated.')
