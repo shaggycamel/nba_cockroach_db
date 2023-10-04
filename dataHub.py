@@ -301,6 +301,7 @@ class dataHub:
         parser = configparser.ConfigParser()
         parser.read(getcwd() + '/database.ini')
         fty_creds = dict(parser.items('fantasy_api'))
+        fty_creds['year'] = str(Season.current_season_year+1)
         
         return bb.League(
             league_id=int(fty_creds['league_id']),
