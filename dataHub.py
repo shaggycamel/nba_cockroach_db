@@ -48,10 +48,7 @@ class dataHub:
         print('\n--------------------- player season stats')
         df = DataFrame()
         for player in active_players_list:
-            player_season = playercareerstats.PlayerCareerStats(
-                player_id=str(player), 
-                timeout=timeout,
-            )
+            player_season = playercareerstats.PlayerCareerStats(player_id=str(player), timeout=timeout)
             player_season = player_season.data_sets[0].get_data_frame()
             df = concat([df, player_season], ignore_index=True)
             ix = active_players_list.index(player)
@@ -95,8 +92,8 @@ class dataHub:
         print('player:', ix, '/', len(active_players_list))
 
         # Clean up for ingestion into database
-        player_info['HEIGHT'] = player_info['HEIGHT'].str.replace('-', '.').astype('float')
-        player_info['WEIGHT'] = player_info['WEIGHT'].astype('int')
+        player_info['HEIGHT_CM'] = [round((float(el[0]) * 12 + float(el[1])) * 2.54, 2) if el is not None else None for el in player_info['HEIGHT'].str.split('-')]
+        player_info['WEIGHT_KG'] = [round(el / 2.2046, 3) if el is not None else None for el in player_info['WEIGHT']]
         df = df.rename(snakecase.convert, axis='columns')
         df = df[col_order]
 
@@ -330,10 +327,86 @@ class dataHub:
         print('free_agents has been updated')
         return df # Eventually delete
 
+    def fty_get_league_info(self, competitors, db_connection):
 
-    def fty_get_team_rosters(self, players, postgres):
-        pass
-    
-    
+        df = []
+        for competitor in competitors:
+            df.append({
+                'season': Season.current_season,
+                'season_year': Season.current_season_year,
+                'league_id': fty_con.league_id,
+                'league_name': fty_con.settings.name
+                'competitor_id': competitor.team_id,
+                'competitor_abbrev': competitor.team_abbrev,
+                'competitor_name_id': competitor.team_name, 
+                'competitor_name': None, # Update manually in database
+                'owner': competitor.owner,
+                'division_id': competitor.division_id,
+                'division_name': competitor.division_name
+            })
+            
+        df = DataFrame(df)
+
+        # Write to database
+        # df.to_sql('league_info', db_conection, schema='fty', index=False, if_exists='append')
+        print('league_info has been updated')
+        return df # Eventually delete
+
+    def fty_get_league_schedule(self, teams, db_connection):
+
+        df = []
+        for competitor in teams:
+            for ix, opponent in enumerate(competitor.schedule):
+                df.append({
+                    'season': Season.current_season, 
+                    'league_id': fty_con.league_id, 
+                    'week': ix + 1, 
+                    'competitor_id': competitor.team_id, 
+                    'competitor_name_id': competitor.team_name, 
+                    'opponent_id': opponent.home_team.team_id if competitor.team_id == opponent.away_team.team_id else opponent.away_team.team_id,
+                    'opponent_name_id': opponent.home_team.team_name if competitor.team_id == opponent.away_team.team_id else opponent.away_team.team_name
+                })
+
+        df = DataFrame(df)
+
+        # Write to database
+        df.to_sql('league_schedule', db_conection, schema='fty', index=False, if_exists='append')
+        print('league_schedule has been updated')
+        return df # Eventually delete
+
+
+    def fty_get_competitor_roster(self, competitors, db_conection):
+
+        df = []
+        for competitor in competitors:
+            for player in competitor.roster:
+                df.append({
+                    'season': Season.current_season, 
+                    'league_id': fty_con.league_id, 
+                    'timestamp': Season.current_datetime, 
+                    'competitor_id': competitor.team_id, 
+                    'competitor_name_id': competitor.team_name, 
+                    'player_fantasy_id': player.playerId, 
+                    'player_fantasy_name': player.name, 
+                    'player_acquisition_type': player.acquisitionType
+                })
         
+        df = DataFrame(df)
+
+        # Write to database
+        df.to_sql('competitor_roster', db_conection, schema='fty', index=False, if_exists='append')
+        print('competitor_roster has been updated')
+        return df # Eventually delete
+    
+    
+
+
+
+
+
+
+
+
+
+
         
