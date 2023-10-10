@@ -40,10 +40,10 @@ class dataHub:
         return create_engine(sql_url)
         
 
-    def get_player_season_stats(self, db_connection):
+    def get_player_season_stats(self, db_con):
         """ Season stats (totals) """
 
-        col_order = read_sql_query("SELECT column_name FROM util.table_column_order WHERE table_name = 'player_season_stats' ORDER BY column_order", db_connection)['column_name'].to_list()
+        col_order = read_sql_query("SELECT column_name FROM util.table_column_order WHERE table_name = 'player_season_stats' ORDER BY column_order", db_con)['column_name'].to_list()
 
         print('\n--------------------- player season stats')
         df = DataFrame()
@@ -62,7 +62,7 @@ class dataHub:
         df = df[col_order]
 
         # Combine with existing dataset & take record, per player, with most minutes per season
-        df_t = read_sql_query('SELECT * FROM nba.player_season_stats', db_connection)
+        df_t = read_sql_query('SELECT * FROM nba.player_season_stats', db_con)
         df_t = concat([df, df_t], ignore_index=True)
         df = (df_t
               .groupby(['season_id', 'player_id'], as_index=False)
@@ -70,14 +70,14 @@ class dataHub:
               .reset_index(drop = True))
 
         # Write to database
-#         df.to_sql('player_season_stats', db_connection, schema='nba', index=False, if_exists='replace')
+#         df.to_sql('player_season_stats', db_con, schema='nba', index=False, if_exists='replace')
         print('player_season_stats has been updated')
         return df # Eventually delete
         
         
-    def get_player_info(self, db_connection):
+    def get_player_info(self, db_con):
 
-        col_order = read_sql_query("SELECT column_name FROM util.table_column_order WHERE table_name = 'player_info' ORDER BY column_order", db_connection)['column_name'].to_list()
+        col_order = read_sql_query("SELECT column_name FROM util.table_column_order WHERE table_name = 'player_info' ORDER BY column_order", db_con)['column_name'].to_list()
 
         print('\n--------------------- player_info')
         df = DataFrame()
@@ -98,20 +98,20 @@ class dataHub:
         df = df[col_order]
 
         # Write to database
-#         df.to_sql('player_info', db_connection, schema='nba', index=False, if_exists='replace')
+#         df.to_sql('player_info', db_con, schema='nba', index=False, if_exists='replace')
         print('player_info has been updated')
         return df # Eventually delete
         
         
-    def get_player_game_log(self, db_connection):
+    def get_player_game_log(self, db_con):
         # NEED TO UPDATE KEY DATES WITH LATEST DATES IN ORDER FOR SEASON TYPE TO BE CORRECT
 
-        col_order = read_sql_query("SELECT column_name FROM util.table_column_order WHERE table_name = 'player_game_log' ORDER BY column_order", db_connection)['column_name'].to_list()
+        col_order = read_sql_query("SELECT column_name FROM util.table_column_order WHERE table_name = 'player_game_log' ORDER BY column_order", db_con)['column_name'].to_list()
 
-        date_from = read_sql_query('SELECT MAX(game_date) FROM nba.player_game_log', db_connection)['max'][0]
+        date_from = read_sql_query('SELECT MAX(game_date) FROM nba.player_game_log', db_con)['max'][0]
         date_from = (date_from + timedelta(days=1)).strftime('%m/%d/%Y')
         date_to = (date.today() - timedelta(days=2)).strftime('%m/%d/%Y')
-        season_types = read_sql_query("SELECT * FROM util.key_dates WHERE begin_date <= '{}' AND end_date >= '{}'".format(date_from, date_to), db_connection)
+        season_types = read_sql_query("SELECT * FROM util.key_dates WHERE begin_date <= '{}' AND end_date >= '{}'".format(date_from, date_to), db_con)
         season_types = season_types[['season_type']]
         if len(season_types)==0: 
             season_types = ['Pre Season']
@@ -145,12 +145,12 @@ class dataHub:
         df = df[col_order]
 
         # Write to database
-#         df.to_sql('player_game_log', db_connection, schema='nba', index=False, if_exists='append')
+#         df.to_sql('player_game_log', db_con, schema='nba', index=False, if_exists='append')
         print('player_game_log has been updated to:', datetime.strptime(date_to, '%m/%d/%Y').strftime('%Y-%m-%d'))
         return df # Eventually delete
 
 
-    def update_past_game_schedule(self, db_connection):
+    def update_past_game_schedule(self, db_con):
         ##### NEEDS WORK
         print('\n--------------------- historical_league_game_schedule')
         df = DataFrame() 
@@ -162,18 +162,18 @@ class dataHub:
             sleep(1)
 
         # Combine with existing dataset replacing last seasons records
-        df_t = read_sql_query("SELECT * FROM nba.league_game_schedule WHERE slug_season < '{}'".format(Season.previous_season), db_connection)
+        df_t = read_sql_query("SELECT * FROM nba.league_game_schedule WHERE slug_season < '{}'".format(Season.previous_season), db_con)
         df = concat([df, df_t], ignore_index=True)
             
         # Write to database
-#         df.to_sql('historical_game_schedule', db_connection, schema='nba', index=False, if_exists='replace')
+#         df.to_sql('historical_game_schedule', db_con, schema='nba', index=False, if_exists='replace')
         print('historical_game_schedule has been updated')
         return df # Eventaully delete
         
     
-    def get_next_game_schedule(self, db_connection):
+    def get_next_game_schedule(self, db_con):
         
-        col_order = read_sql_query("SELECT column_name FROM util.table_column_order WHERE table_name = 'league_game_schedule' ORDER BY column_order", db_connection)['column_name'].to_list()
+        col_order = read_sql_query("SELECT column_name FROM util.table_column_order WHERE table_name = 'league_game_schedule' ORDER BY column_order", db_con)['column_name'].to_list()
 
         # data request
         request = get(f'https://data.nba.com/data/10s/v2015/json/mobile_teams/nba/{Season.current_season_year}/league/00_full_schedule_week_tbds.json')
@@ -209,14 +209,14 @@ class dataHub:
         df = df[col_order]
 
         # Write to database
-#         df.to_sql('league_game_schedule', db_connection, schema='nba', index=False, if_exists='append')
+#         df.to_sql('league_game_schedule', db_con, schema='nba', index=False, if_exists='append')
         print('current_game_schedule has been updated')
         return df # Eventually delete
 
     
-    def get_team_roster(self, db_connection):
+    def get_team_roster(self, db_con):
 
-        col_order = read_sql_query("SELECT column_name FROM util.table_column_order WHERE table_name = 'team_roster' ORDER BY column_order", db_connection)['column_name'].to_list()
+        col_order = read_sql_query("SELECT column_name FROM util.table_column_order WHERE table_name = 'team_roster' ORDER BY column_order", db_con)['column_name'].to_list()
         
         print('\n--------------------- commonteamroster')
         df = DataFrame()
@@ -242,17 +242,17 @@ class dataHub:
         # ADD DATA TO CONTROL FOR PLAYERS BEING TRADED
     
         # Write to database
-#         df.to_sql('team_roster', db_connection, schema='nba', index=False, if_exists='append')
+#         df.to_sql('team_roster', db_con, schema='nba', index=False, if_exists='append')
         print('historical_game_schedule has been updated')
         return df # evetually delte
 
 
 # TRANSACTIONS
-    def get_transactions(self, db_connection):
+    def get_transactions(self, db_con):
 
         print('\n--------------------- transactions')
-        col_order = read_sql_query("SELECT column_name FROM util.table_column_order WHERE table_name = 'transaction_log' ORDER BY column_order", db_connection)['column_name'].to_list()
-        date_from = read_sql_query('SELECT MAX(date) FROM nba.transaction_log', db_connection)['max'][0] - timedelta(days=4) # four days leway, unless records are added late
+        col_order = read_sql_query("SELECT column_name FROM util.table_column_order WHERE table_name = 'transaction_log' ORDER BY column_order", db_con)['column_name'].to_list()
+        date_from = read_sql_query('SELECT MAX(date) FROM nba.transaction_log', db_con)['max'][0] - timedelta(days=4) # four days leway, unless records are added late
 
         async def search_transactions(starting_row, transaction_type) -> str:
             return await pst.Search(
@@ -284,10 +284,10 @@ class dataHub:
         df = df[col_order]
         
         # Write to database
-        df_t = read_sql_query("SELECT * FROM nba.transaction_log WHERE date >= '{}'".format(date_from), db_connection)
+        df_t = read_sql_query("SELECT * FROM nba.transaction_log WHERE date >= '{}'".format(date_from), db_con)
         df = concat([df, df_t], axis=0, ignore_index=True)
         df = df[~df.duplicated(keep = False)].reset_index(drop=True)
-#         df.to_sql('transaction_log', db_connection, schema='nba', index=False, if_exists='append')
+#         df.to_sql('transaction_log', db_con, schema='nba', index=False, if_exists='append')
         print('transaction_log has been updated')
         return df # evetually delte      
         
@@ -323,19 +323,19 @@ class dataHub:
         df = DataFrame(df)
         
         # Write to database
-        # df.to_sql('free_agents', db_conection, schema='fty', index=False, if_exists='replace')
+        # df.to_sql('free_agents', db_con, schema='fty', index=False, if_exists='replace')
         print('free_agents has been updated')
         return df # Eventually delete
 
-    def fty_get_league_info(self, competitors, db_connection):
+    def fty_get_league_info(self, fty_con, db_con):
 
         df = []
-        for competitor in competitors:
+        for competitor in fty_con.teams:
             df.append({
                 'season': Season.current_season,
                 'season_year': Season.current_season_year,
                 'league_id': fty_con.league_id,
-                'league_name': fty_con.settings.name
+                'league_name': fty_con.settings.name,
                 'competitor_id': competitor.team_id,
                 'competitor_abbrev': competitor.team_abbrev,
                 'competitor_name_id': competitor.team_name, 
@@ -348,14 +348,14 @@ class dataHub:
         df = DataFrame(df)
 
         # Write to database
-        # df.to_sql('league_info', db_conection, schema='fty', index=False, if_exists='append')
+        # df.to_sql('league_info', db_con, schema='fty', index=False, if_exists='append')
         print('league_info has been updated')
         return df # Eventually delete
 
-    def fty_get_league_schedule(self, teams, db_connection):
+    def fty_get_league_schedule(self, fty_con, db_con):
 
         df = []
-        for competitor in teams:
+        for competitor in fty_con.teams:
             for ix, opponent in enumerate(competitor.schedule):
                 df.append({
                     'season': Season.current_season, 
@@ -370,20 +370,21 @@ class dataHub:
         df = DataFrame(df)
 
         # Write to database
-        df.to_sql('league_schedule', db_conection, schema='fty', index=False, if_exists='append')
-        print('league_schedule has been updated')
+        # df.to_sql('league_schedule', db_con, schema='fty', index=False, if_exists='append')
+        # print('league_schedule has been updated')
         return df # Eventually delete
 
 
-    def fty_get_competitor_roster(self, competitors, db_conection):
+    def fty_get_competitor_roster(self, fty_con, db_conection):
 
         df = []
-        for competitor in competitors:
+        for competitor in fty_con.teams:
             for player in competitor.roster:
                 df.append({
                     'season': Season.current_season, 
                     'league_id': fty_con.league_id, 
                     'timestamp': Season.current_datetime, 
+                    'league_week': fty_con.current_week,
                     'competitor_id': competitor.team_id, 
                     'competitor_name_id': competitor.team_name, 
                     'player_fantasy_id': player.playerId, 
@@ -394,9 +395,23 @@ class dataHub:
         df = DataFrame(df)
 
         # Write to database
-        df.to_sql('competitor_roster', db_conection, schema='fty', index=False, if_exists='append')
-        print('competitor_roster has been updated')
+        # df.to_sql('competitor_roster', db_con, schema='fty', index=False, if_exists='append')
+        # print('competitor_roster has been updated')
         return df # Eventually delete
+
+
+    # NEED TO WAIT TO TEST THIS ONE!!!!!
+    def fty_get_recent_activity(self, fty_con):
+        pass
+
+        # df = fty_con.recent_activity()
+        # df = DataFrame(df)
+
+        # df_t = read_sql_query("SELECT * FROM fty.recent_activity", db_con)
+        # df = concat([df, df_t], axis=0, ignore_index=True)).drop_duplicates()
+        # df.to_sql('recent_activity', db_con, schema='fty', index=False, if_exists='replace')
+        # print('recent_activity has been updated')
+        # return df # Eventually delete
     
     
 
