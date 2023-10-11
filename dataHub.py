@@ -7,9 +7,11 @@ from pathlib import Path
 from requests import get
 from datetime import datetime, date, timedelta
 from time import sleep
-from pandas import DataFrame, concat, read_sql_query, to_datetime
+from pandas import DataFrame, concat, read_sql_query, to_datetime, to_numeric
+from numpy import where
 from sqlalchemy import create_engine
 from importlib.machinery import SourceFileLoader
+from pandasql import sqldf; pysqldf = lambda q: sqldf(q, locals())
 
 from nba_api.stats.endpoints import playercareerstats, commonplayerinfo, playergamelog, leaguegamelog, commonteamroster
 from nba_api.stats.static import players, teams
@@ -17,6 +19,7 @@ from nba_api.stats.library.parameters import Season
 import pro_sports_transactions as pst
 import asyncio
 import nest_asyncio; nest_asyncio.apply() # needed for running code in jupyter
+
 
 # Constants
 timeout = 3600 + 600 # 1hour & 10mins
@@ -92,8 +95,8 @@ class dataHub:
         print('player:', ix, '/', len(active_players_list))
 
         # Clean up for ingestion into database
-        player_info['HEIGHT_CM'] = [round((float(el[0]) * 12 + float(el[1])) * 2.54, 2) if el is not None else None for el in player_info['HEIGHT'].str.split('-')]
-        player_info['WEIGHT_KG'] = [round(el / 2.2046, 3) if el is not None else None for el in player_info['WEIGHT']]
+        df['HEIGHT_CM'] = [round((float(el[0]) * 12 + float(el[1])) * 2.54, 2) if el is not None else None for el in df['HEIGHT'].str.split('-')]
+        df['WEIGHT_KG'] = [round(float(el) / 2.2046, 3) if el is not None else None for el in df['WEIGHT']]
         df = df.rename(snakecase.convert, axis='columns')
         df = df[col_order]
 
@@ -151,22 +154,31 @@ class dataHub:
 
 
     def update_past_game_schedule(self, db_con):
-        ##### NEEDS WORK
+        col_order = read_sql_query("SELECT column_name FROM util.table_column_order WHERE table_name = 'league_game_schedule' ORDER BY column_order", db_con)['column_name'].to_list()
+        
         print('\n--------------------- historical_league_game_schedule')
         df = DataFrame() 
-        for season_type in ['Regular Season', 'Pre Season', 'Playoffs', 'All Star', 'All-Star']:
-            hist_game_schedule = leaguegamelog.LeagueGameLog(season_type_all_star=season_type, season=Season.current_season_year-1, timeout=timeout)
+        for type_season in ['Regular Season', 'Pre Season', 'Playoffs', 'All Star', 'All-Star']:
+            hist_game_schedule = leaguegamelog.LeagueGameLog(season_type_all_star=type_season, season=Season.current_season_year-1)
             hist_game_schedule = hist_game_schedule.get_data_frames()[0]
-            hist_game_schedule['season_type'] = season_type
+            hist_game_schedule['type_season'] = type_season
             df = concat([df, hist_game_schedule], ignore_index=True)
             sleep(1)
 
-        # Combine with existing dataset replacing last seasons records
-        df_t = read_sql_query("SELECT * FROM nba.league_game_schedule WHERE slug_season < '{}'".format(Season.previous_season), db_con)
-        df = concat([df, df_t], ignore_index=True)
-            
-        # Write to database
-#         df.to_sql('historical_game_schedule', db_con, schema='nba', index=False, if_exists='replace')
+        df['GAME_ID'] = to_numeric(df['GAME_ID'])
+        df = df.groupby(['GAME_ID']).head(1)
+        df['slug_matchup'] = df['MATCHUP']
+        df['opponent'] = df['MATCHUP'].str.replace(r'[ @ | vs. ]', '', regex=True)
+        df['opponent'] = df.apply(lambda x: x['opponent'].replace(x['TEAM_ABBREVIATION'], ''), axis=1)
+        df['slug_team_winner'] = where(df['WL'] == 'W', df['TEAM_ABBREVIATION'], df['opponent'])
+        df['slug_team_loser'] = where(df['WL'] == 'L', df['TEAM_ABBREVIATION'], df['opponent'])
+        df['slug_season'] = Season.previous_season
+        df = df.rename(snakecase.convert, axis='columns')
+        df = df[col_order]
+        
+        df_t = read_sql_query("SELECT * FROM nba.league_game_schedule WHERE slug_season != '{}'".format(Season.previous_season), db_con)
+        df = concat([df_t, df], ignore_index=True)
+        # df.to_sql('league_game_schedule', db_con, schema='nba', index=False, if_exists='replace')
         print('historical_game_schedule has been updated')
         return df # Eventaully delete
         
@@ -174,39 +186,45 @@ class dataHub:
     def get_next_game_schedule(self, db_con):
         
         col_order = read_sql_query("SELECT column_name FROM util.table_column_order WHERE table_name = 'league_game_schedule' ORDER BY column_order", db_con)['column_name'].to_list()
-
+        
         # data request
         request = get(f'https://data.nba.com/data/10s/v2015/json/mobile_teams/nba/{Season.current_season_year}/league/00_full_schedule_week_tbds.json')
-
+        
         # Dataframe object to be added to
         df = DataFrame()
-
+        
         # Loop through month elements
         for month in request.json()['lscd']:
             df_row = DataFrame(month['mscd']['g'])[['gid', 'gdte', 'an', 'ac', 'htm', 'vtm', 'v', 'h']]
-
+        
             # Obtain home and away team info
             for col in ['h', 'v']:
                 df_col = DataFrame([[el['tid'], el['ta']] for el in df_row[col]])
                 df_col.columns = ['home_team_id', 'home_team_slug'] if col == 'h' else ['away_team_id', 'away_team_slug']
                 df_row = concat([df_row, df_col], axis = 1)
-
+        
             # Rename columns
             df_row = df_row.drop(columns=['v', 'h'])
             df_row = df_row.rename(columns={'gid':'game_id', 'gdte':'game_date', 'an':'arena', 'ac':'city', 'htm':'home_team_time', 'vtm':'away_team_time'})
-
+        
             # Collate data
             df = concat([df, df_row], ignore_index=True)
-
+        
         # Cast date columns to_date & Create new columns
-        df[['game_date', 'home_team_time', 'away_team_time']] = df[['game_date', 'home_team_time', 'away_team_time']].apply(to_datetime) 
-        df['type_season'] = None
+        df['game_date'] = to_datetime(df['game_date']) 
         df['slug_season'] = Season.current_season
         df['slug_matchup'] = df['home_team_slug'] + ' vs. ' + df['away_team_slug']
         df['slug_team_winner'] = None
         df['slug_team_loser'] = None
-        df['number_game_day'] = None
-        df = df[col_order]
+        
+        key_dates = read_sql_query('SELECT * FROM util.key_dates', db_con)
+        df = sqldf("""
+            SELECT 
+                key_dates.season_type AS type_season, 
+                df.*
+            FROM df
+            LEFT JOIN key_dates ON df.game_date BETWEEN key_dates.begin_date AND key_dates.end_date
+        """, locals())[col_order]
 
         # Write to database
 #         df.to_sql('league_game_schedule', db_con, schema='nba', index=False, if_exists='append')
@@ -221,7 +239,7 @@ class dataHub:
         print('\n--------------------- commonteamroster')
         df = DataFrame()
         for team in nba_teams['id'].to_list():
-            common_teamroster = commonteamroster.CommonTeamRoster(season=Season.current_season_year, team_id=team, timeout=timeout)
+            common_teamroster = commonteamroster.CommonTeamRoster(season=Season.current_season_year, team_id=team)
             common_teamroster = common_teamroster.get_data_frames()[0]
             df = concat([df, common_teamroster], ignore_index=True)
             ix = nba_teams['id'].to_list().index(team)
@@ -239,11 +257,13 @@ class dataHub:
         df['slug_season'] = Season.current_season
         df = df[col_order]
 
-        # ADD DATA TO CONTROL FOR PLAYERS BEING TRADED
-    
+        # CONTROL FOR PLAYERS BEING TRADED
+        df_t = read_sql_query('SELECT * FROM nba.team_roster WHERE season = {}'.format(Season.current_season_year), db_con)
+        df = concat([df, df_t]).drop_duplicates()
+        
         # Write to database
 #         df.to_sql('team_roster', db_con, schema='nba', index=False, if_exists='append')
-        print('historical_game_schedule has been updated')
+        print('team_roster has been updated')
         return df # evetually delte
 
 
