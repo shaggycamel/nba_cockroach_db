@@ -1,6 +1,7 @@
 from pandas import DataFrame, read_sql_query
 from datetime import datetime
 from pytz import timezone
+from smtplib import SMTP
 from sqlalchemy.dialects.postgresql.base import PGDialect; PGDialect._get_server_version_info = lambda * args: (9, 2)
 from dataHub import dataHub
 
@@ -66,7 +67,17 @@ DataFrame(
 
 
 if len(failed_objects) > 0:
-    raise Exception(print(nz_date, '\nFailed objects:', failed_objects['table_name'].to_list()))
+
+    email_address = 'oliverf.eaton@gmail.com'
+    password = 'qckbndgopzwjkaxq'
+    message = failed_objects['table_name'].to_list()
+
+    server = SMTP('smtp.gmail.com', 587)
+    server.starttls()
+    server.login(email_address, password)
+    server.sendmail(email_address, email_address, f'Subject: nba-failed-objects\n\n{message}')
+    raise Exception(print(nz_date, '\nFailed objects:', message))
+
 else:
     print(nz_date, '\nAll tables successfully updated.')
 
