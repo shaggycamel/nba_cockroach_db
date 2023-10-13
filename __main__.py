@@ -10,7 +10,7 @@ db_con = dh.db_connect('cockroach')
 fty_con = dh.fty_api_con()
 
 ################################## Custom function to handle running & logging events
-def custom_prelog(eval_string, table_name):
+def custom_prelog(eval_string, table_name, batch_attempt):
     try:
         eval(eval_string)
         success = True  
@@ -21,27 +21,25 @@ def custom_prelog(eval_string, table_name):
         print('--------------------- NOT UPDATED:', table_name)
     finally:
         DataFrame(
-            data = {'table_name': table_name, 'process_date': datetime.now(timezone('NZ')), 'successful_run': success, 'error_message': error_message}, 
+            data = {'table_name': table_name, 'process_date': datetime.now(timezone('NZ')), 'batch_attempt': batch_attempt, 'successful_run': success, 'error_message': error_message}, 
             index=[0]
         ).to_sql('update_log', db_con, schema='util', index=False, if_exists='append')
 
 
 ################################### Log start of process
+nz_date = datetime.now(timezone('NZ')).strftime('%Y-%m-%d')
+batch_attempt = read_sql_query("SELECT MAX(batch_attempt) FROM util.update_log WHERE process_date::DATE = '{}'".format(nz_date), db_con)['max']
+batch_attempt = 1 if batch_attempt[0] is None else batch_attempt[0] + 1
+
 DataFrame(
-    data = {'table_name': 'process start', 'process_date': datetime.now(timezone('NZ')), 'successful_run': None, 'error_message': None}, 
+    data = {'table_name': 'process start', 'process_date': datetime.now(timezone('NZ')), 'batch_attempt': batch_attempt, 'successful_run': True, 'error_message': None}, 
     index=[0]
 ).to_sql('update_log', db_con, schema='util', index=False, if_exists='append')
 
 
 #################################### Obtain update_schedule filtering on US Eastern Time
 us_eastern_time = datetime.now(timezone('US/Eastern')).strftime('%Y-%m-%d')
-# update_schedule = read_sql_query("SELECT * FROM util.update_schedule WHERE run_period_start <= '{}' AND run_period_end >= '{}'".format(us_eastern_time, us_eastern_time), db_con)
-
-temp_query = """SELECT * FROM util.update_schedule
-WHERE table_name IN (
-    'nba.player_info'
-)"""
-update_schedule = read_sql_query(temp_query, db_con)
+update_schedule = read_sql_query("SELECT * FROM util.update_schedule WHERE run_period_start <= '{}' AND run_period_end >= '{}'".format(us_eastern_time, us_eastern_time), db_con)
 
 
 #################################### Loop through update schedule and update objects accordingly
@@ -53,15 +51,14 @@ for _, row in update_schedule.iterrows():
         eval_string = None
 
     if (eval_string is not None):
-        custom_prelog(eval_string, row['table_name'])
+        custom_prelog(eval_string, row['table_name'], batch_attempt)
         
 
 #################################### Log end of process
-nz_date = datetime.now(timezone('NZ')).strftime('%Y-%m-%d')
-failed_objects = read_sql_query("SELECT table_name FROM util.update_log WHERE successful_run = 'false' AND process_date::DATE = '{}'".format(nz_date), db_con)
+failed_objects = read_sql_query("SELECT table_name, error_message FROM util.update_log WHERE successful_run = 'false' AND process_date::DATE = '{}' AND batch_attempt = {}".format(nz_date, batch_attempt), db_con)
 
 DataFrame(
-    data = {'table_name': 'process end', 'process_date': datetime.now(timezone('NZ')), 'successful_run': False if len(failed_objects) > 0 else True, 'error_message': None}, 
+    data = {'table_name': 'process end', 'process_date': datetime.now(timezone('NZ')), 'batch_attempt': batch_attempt, 'successful_run': False if len(failed_objects) > 0 else True, 'error_message': None}, 
     index=[0]
 ).to_sql('update_log', db_con, schema='util', index=False, if_exists='append')
 
@@ -70,13 +67,14 @@ if len(failed_objects) > 0:
 
     email_address = 'oliverf.eaton@gmail.com'
     password = 'qckbndgopzwjkaxq'
-    message = failed_objects['table_name'].to_list()
+    message = ''
+    for _, row in failed_objects.iterrows(): message += row['table_name'] + '\n' + row['error_message'] + '\n\n'
 
     server = SMTP('smtp.gmail.com', 587)
     server.starttls()
     server.login(email_address, password)
     server.sendmail(email_address, email_address, f'Subject: nba-failed-objects\n\n{message}')
-    raise Exception(print(nz_date, '\nFailed objects:', message))
+    raise Exception(print(nz_date, '\nFailed objects:', failed_objects['table_name'].to_list()))
 
 else:
     print(nz_date, '\nAll tables successfully updated.')
