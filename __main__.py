@@ -67,13 +67,13 @@ if len(failed_objects) > 0:
 
     email_address = 'oliverf.eaton@gmail.com'
     password = 'qckbndgopzwjkaxq'
-    message = ''
+    message = str(failed_objects['table_name'].to_list()) + '\n\n'
     for _, row in failed_objects.iterrows(): message += row['table_name'] + '\n' + row['error_message'] + '\n\n'
 
     server = SMTP('smtp.gmail.com', 587)
     server.starttls()
     server.login(email_address, password)
-    server.sendmail(email_address, email_address, f'Subject: nba-failed-objects\n\n{message}')
+    server.sendmail(email_address, email_address, f'Subject: nba-data-mgmt\n\n{message}')
     raise Exception(print(nz_date, '\nFailed objects:', failed_objects['table_name'].to_list()))
 
 else:
