@@ -40,7 +40,7 @@ class dataHub:
         sql_url = 'dialect://user:password@host:port/database'
         for el in db_creds: sql_url = sql_url.replace(el, db_creds[el])
 
-        return create_engine(sql_url)
+        return create_engine(sql_url, connect_args={'connect_timeout': 5 * 60}) # 5 minute timeout
         
 
     def get_player_season_stats(self, db_con):
@@ -252,6 +252,11 @@ class dataHub:
             on=['TeamID'],
             how = 'left'
         )
+        df['HEIGHT'] = [None if (el is None or el == '') else el for el in df['HEIGHT']]
+        df['WEIGHT'] = [None if (el is None or el == '') else el for el in df['WEIGHT']]
+        df['HEIGHT_CM'] = [round((float(el[0]) * 12 + float(el[1])) * 2.54, 2) if el is not None else None for el in df['HEIGHT'].str.split('-')]
+        df['WEIGHT_KG'] = [round(float(el) / 2.2046, 3) if el is not None else None for el in df['WEIGHT']]
+        df['NUM'] = [None if (el is None or el == '') else el for el in df['NUM']]
         df = df.rename(snakecase.convert, axis='columns')
         df['slug_season'] = Season.current_season
         df = df[col_order]
@@ -324,7 +329,7 @@ class dataHub:
             swid=fty_creds['swid']
         )
     
-    def fty_get_free_agents(self, fty_con, db_conection):
+    def fty_get_free_agents(self, fty_con, db_con):
         
         df = []
         for free_agent in fty_con.free_agents(size=1000):
@@ -391,7 +396,7 @@ class dataHub:
         print('league_schedule has been updated')
 
 
-    def fty_get_competitor_roster(self, fty_con, db_conection):
+    def fty_get_competitor_roster(self, fty_con, db_con):
 
         df = []
         for competitor in fty_con.teams:
