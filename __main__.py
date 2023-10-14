@@ -1,3 +1,4 @@
+from sys import argv
 from pandas import DataFrame, read_sql_query
 from datetime import datetime
 from pytz import timezone
@@ -19,7 +20,7 @@ def custom_prelog(eval_string, table_name, batch_attempt):
     except Exception as e:
         success = False
         error_message = str(e)
-        print('--------------------- NOT UPDATED:', table_name)
+        print('--------------------- NOT UPDATED:', table_name, '\n\n')
     finally:
         DataFrame(
             data = {'table_name': table_name, 'process_date': datetime.now(timezone('NZ')), 'batch_attempt': batch_attempt, 'successful_run': success, 'error_message': error_message}, 
@@ -41,7 +42,14 @@ DataFrame(
 #################################### Obtain update_schedule filtering on US Eastern Time
 #################################### Loop through update schedule and update objects accordingly
 us_eastern_time = datetime.now(timezone('US/Eastern')).strftime('%Y-%m-%d')
-update_schedule = read_sql_query("SELECT * FROM util.update_schedule WHERE run_period_start <= '{}' AND run_period_end >= '{}'".format(us_eastern_time, us_eastern_time), db_con)
+try: reattempt_objs = argv[1].replace(",", "','")
+except Exception as e: pass
+
+if 'reattempt_objs' in locals(): 
+    update_schedule = read_sql_query("SELECT * FROM util.update_schedule WHERE table_name IN ('{}')".format(reattempt_objs), db_con)
+else:
+    update_schedule = read_sql_query("SELECT * FROM util.update_schedule WHERE run_period_start <= '{}' AND run_period_end >= '{}'".format(us_eastern_time, us_eastern_time), db_con)
+    
 
 for _, row in update_schedule.iterrows():
 

@@ -69,7 +69,7 @@ class dataHub:
 
         # Write to database
         df.to_sql('player_season_stats', db_con, schema='nba', index=False, if_exists='replace')
-        print('player_season_stats has been updated')
+        print('player_season_stats has been updated\n\n')
         
         
     def get_player_info(self, db_con):
@@ -102,7 +102,7 @@ class dataHub:
 
         # Write to database
         df.to_sql('player_info', db_con, schema='nba', index=False, if_exists='replace')
-        print('player_info has been updated')
+        print('player_info has been updated\n\n')
         
         
     def get_player_game_log(self, db_con):
@@ -148,7 +148,7 @@ class dataHub:
 
         # Write to database
         df.to_sql('player_game_log', db_con, schema='nba', index=False, if_exists='append')
-        print('player_game_log has been updated to:', datetime.strptime(date_to, '%m/%d/%Y').strftime('%Y-%m-%d'))
+        print('player_game_log has been updated to:', datetime.strptime(date_to, '%m/%d/%Y').strftime('%Y-%m-%d'), '\n\n')
 
 
     def update_past_game_schedule(self, db_con):
@@ -178,7 +178,7 @@ class dataHub:
         df_t = read_sql_query("SELECT * FROM nba.league_game_schedule WHERE slug_season != '{}'".format(Season.previous_season), db_con)
         df = concat([df_t, df], ignore_index=True).drop_duplicates()
         df.to_sql('league_game_schedule', db_con, schema='nba', index=False, if_exists='replace')
-        print('historical_game_schedule has been updated')
+        print('historical_game_schedule has been updated\n\n')
         
     
     def get_next_game_schedule(self, db_con):
@@ -226,7 +226,7 @@ class dataHub:
 
         # Write to database
         df.to_sql('league_game_schedule', db_con, schema='nba', index=False, if_exists='append')
-        print('current_game_schedule has been updated')
+        print('current_game_schedule has been updated\n\n')
 
     
     def get_team_roster(self, db_con):
@@ -265,7 +265,7 @@ class dataHub:
         
         # Write to database
         df.to_sql('team_roster', db_con, schema='nba', index=False, if_exists='append')
-        print('team_roster has been updated')
+        print('team_roster has been updated\n\n')
 
 
 # TRANSACTIONS
@@ -309,7 +309,7 @@ class dataHub:
         df = concat([df, df_t], axis=0, ignore_index=True)
         df = df[~df.duplicated(keep = False)].reset_index(drop=True)
         df.to_sql('transaction_log', db_con, schema='nba', index=False, if_exists='append')
-        print('transaction_log has been updated')
+        print('transaction_log has been updated\n\n')
         
           
     def fty_api_con(self):
@@ -344,7 +344,7 @@ class dataHub:
         
         # Write to database
         df.to_sql('free_agents', db_con, schema='fty', index=False, if_exists='replace')
-        print('free_agents has been updated')
+        print('free_agents has been updated\n\n')
 
     
     def fty_get_league_info(self, fty_con, db_con):
@@ -369,7 +369,7 @@ class dataHub:
 
         # Write to database
         df.to_sql('league_info', db_con, schema='fty', index=False, if_exists='append')
-        print('league_info has been updated')
+        print('league_info has been updated\n\n')
 
     
     def fty_get_league_schedule(self, fty_con, db_con):
@@ -391,7 +391,7 @@ class dataHub:
 
         # Write to database
         df.to_sql('league_schedule', db_con, schema='fty', index=False, if_exists='append')
-        print('league_schedule has been updated')
+        print('league_schedule has been updated\n\n')
 
 
     def fty_get_competitor_roster(self, fty_con, db_con):
@@ -416,7 +416,7 @@ class dataHub:
 
         # Write to database
         df.to_sql('competitor_roster', db_con, schema='fty', index=False, if_exists='append')
-        print('competitor_roster has been updated')
+        print('competitor_roster has been updated\n\n')
 
 
     def fty_get_recent_activity(self, fty_con, db_con):
@@ -437,7 +437,7 @@ class dataHub:
         df_t = read_sql_query("SELECT * FROM fty.recent_activity", db_con)
         df = concat([df, df_t], axis=0, ignore_index=True).drop_duplicates()
         df.to_sql('recent_activity', db_con, schema='fty', index=False, if_exists='replace')
-        print('recent_activity has been updated')
+        print('recent_activity has been updated\n\n')
     
     
 
