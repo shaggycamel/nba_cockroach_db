@@ -18,4 +18,4 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 COPY . .
 
 # Run the application.
-CMD python3 .
+ENTRYPOINT ["python3", "."]

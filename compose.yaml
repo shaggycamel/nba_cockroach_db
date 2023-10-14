@@ -1,7 +1,0 @@
-# obtain-data is the image name
-services:
-  obtain-data:
-    image: shaggycamel/nba_cockroach_db:obtain-data
-    # platform: linux/amd64
-    build:
-      context: .
