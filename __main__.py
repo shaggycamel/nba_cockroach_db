@@ -6,6 +6,7 @@ from sqlalchemy.dialects.postgresql.base import PGDialect; PGDialect._get_server
 from dataHub import dataHub
 
 dh = dataHub()
+# db_con = dh.db_connect('postgre')
 db_con = dh.db_connect('cockroach')
 fty_con = dh.fty_api_con()
 
@@ -38,11 +39,10 @@ DataFrame(
 
 
 #################################### Obtain update_schedule filtering on US Eastern Time
+#################################### Loop through update schedule and update objects accordingly
 us_eastern_time = datetime.now(timezone('US/Eastern')).strftime('%Y-%m-%d')
 update_schedule = read_sql_query("SELECT * FROM util.update_schedule WHERE run_period_start <= '{}' AND run_period_end >= '{}'".format(us_eastern_time, us_eastern_time), db_con)
 
-
-#################################### Loop through update schedule and update objects accordingly
 for _, row in update_schedule.iterrows():
 
     # Create evaluation string & handle functions that only need to be run weekly
@@ -67,14 +67,14 @@ if len(failed_objects) > 0:
 
     email_address = 'oliverf.eaton@gmail.com'
     password = 'qckbndgopzwjkaxq'
-    message = str(failed_objects['table_name'].to_list()) + '\n\n'
+    message = ','.join(failed_objects['table_name'].to_list()) + '\n\n'
     for _, row in failed_objects.iterrows(): message += row['table_name'] + '\n' + row['error_message'] + '\n\n'
 
     server = SMTP('smtp.gmail.com', 587)
     server.starttls()
     server.login(email_address, password)
     server.sendmail(email_address, email_address, f'Subject: nba-data-mgmt\n\n{message}')
-    raise Exception(print(nz_date, '\nFailed objects:', failed_objects['table_name'].to_list()))
+    raise Exception(print(nz_date, '\nFailed objects:', failed_objects['table_name'].to_list(), '\n'))
 
 else:
     print(nz_date, '\nAll tables successfully updated.')

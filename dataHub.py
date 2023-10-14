@@ -3,14 +3,12 @@ import configparser
 import snakecase
 import espn_api.basketball as bb
 from os import getcwd
-from pathlib import Path
 from requests import get
 from datetime import datetime, date, timedelta
 from time import sleep
 from pandas import DataFrame, concat, read_sql_query, to_datetime, to_numeric
 from numpy import where
 from sqlalchemy import create_engine
-from importlib.machinery import SourceFileLoader
 from pandasql import sqldf; pysqldf = lambda q: sqldf(q, locals())
 
 from nba_api.stats.endpoints import playercareerstats, commonplayerinfo, playergamelog, leaguegamelog, commonteamroster
@@ -410,6 +408,7 @@ class dataHub:
                     'competitor_name_id': competitor.team_name, 
                     'player_fantasy_id': player.playerId, 
                     'player_fantasy_name': player.name, 
+                    'player_injury_status': player.injuryStatus,
                     'player_acquisition_type': player.acquisitionType
                 })
         
