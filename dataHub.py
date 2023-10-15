@@ -114,7 +114,7 @@ class dataHub:
         date_from = (date_from + timedelta(days=1)).strftime('%m/%d/%Y')
         date_to = (date.today() - timedelta(days=2)).strftime('%m/%d/%Y')
         season_types = read_sql_query("SELECT * FROM util.key_dates WHERE begin_date <= '{}' AND end_date >= '{}'".format(date_from, date_to), db_con)
-        season_types = season_types[['season_type']]
+        season_types = season_types['season_type'].to_list()
         if len(season_types)==0: 
             season_types = ['Pre Season']
 
