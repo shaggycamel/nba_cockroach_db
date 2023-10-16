@@ -410,7 +410,7 @@ class dataHub:
                     'competitor_name_id': competitor.team_name, 
                     'player_fantasy_id': player.playerId, 
                     'player_name': player.name, 
-                    'player_team': player.proTeam
+                    'player_team': player.proTeam,
                     'player_injury_status': player.injuryStatus,
                     'player_acquisition_type': player.acquisitionType
                 })
