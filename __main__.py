@@ -11,6 +11,9 @@ dh = dataHub()
 db_con = dh.db_connect('cockroach')
 fty_con = dh.fty_api_con()
 
+print('\nWriting to database:', 'cockroach' if 'cockroach' in str(db_con.url) else 'postgre', '\n\n')
+
+
 ################################## Custom function to handle running & logging events
 def custom_prelog(eval_string, table_name, batch_attempt):
     try:
@@ -42,8 +45,10 @@ DataFrame(
 #################################### Obtain update_schedule filtering on US Eastern Time
 #################################### Loop through update schedule and update objects accordingly
 us_eastern_time = datetime.now(timezone('US/Eastern')).strftime('%Y-%m-%d')
-try: reattempt_objs = argv[1].replace(",", "','")
-except Exception as e: pass
+try:
+    # this determines if code was run interactively
+    if argv[1] != '-f': reattempt_objs = argv[1].replace(",", "','")
+except IndexError as e: pass
 
 if 'reattempt_objs' in locals(): 
     update_schedule = read_sql_query("SELECT * FROM util.update_schedule WHERE table_name IN ('{}')".format(reattempt_objs), db_con)
@@ -52,14 +57,8 @@ else:
     
 
 for _, row in update_schedule.iterrows():
-
-    # Create evaluation string & handle functions that only need to be run weekly
     eval_string = ''.join(['dh.', row['associated_function'], '(', row['function_arguments'], ')'])
-    if ((row[['update_schedule']].str.contains('weekly')[0]) and (datetime.now(timezone('NZ')).weekday() != 0)):
-        eval_string = None
-
-    if (eval_string is not None):
-        custom_prelog(eval_string, row['table_name'], batch_attempt)
+    custom_prelog(eval_string, row['table_name'], batch_attempt)
         
 
 #################################### Log end of process
