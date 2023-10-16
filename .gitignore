@@ -4,6 +4,8 @@
 # Database config file
 # database.ini
 
+# Cron shell script
+cron*.sh
 
 ##### ignore R files
 
