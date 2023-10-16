@@ -69,7 +69,7 @@ class dataHub:
         df = df.sort_values(['season_id', 'player_id'], ascending=False).groupby(['season_id', 'player_id']).head(1)
 
         # Write to database
-        # df.to_sql('player_season_stats', db_con, schema='nba', index=False, if_exists='replace')
+        df.to_sql('player_season_stats', db_con, schema='nba', index=False, if_exists='replace')
         print('player_season_stats has been updated\n\n')
         
         
@@ -102,7 +102,7 @@ class dataHub:
         df = df.sort_values(['to_year', 'games_played_current_season_flag'], ascending=False).groupby('person_id').head(1)
 
         # Write to database
-        # df.to_sql('player_info', db_con, schema='nba', index=False, if_exists='replace')
+        df.to_sql('player_info', db_con, schema='nba', index=False, if_exists='replace')
         print('player_info has been updated\n\n')
         
         
@@ -148,7 +148,7 @@ class dataHub:
         df = df[col_order]
 
         # Write to database
-        # df.to_sql('player_game_log', db_con, schema='nba', index=False, if_exists='append')
+        df.to_sql('player_game_log', db_con, schema='nba', index=False, if_exists='append')
         print('player_game_log has been updated to:', datetime.strptime(date_to, '%m/%d/%Y').strftime('%Y-%m-%d'), '\n\n')
 
 
@@ -178,7 +178,7 @@ class dataHub:
         
         df_t = read_sql_query("SELECT * FROM nba.league_game_schedule WHERE slug_season != '{}'".format(Season.previous_season), db_con)
         df = concat([df_t, df], ignore_index=True).drop_duplicates()
-        # df.to_sql('league_game_schedule', db_con, schema='nba', index=False, if_exists='replace')
+        df.to_sql('league_game_schedule', db_con, schema='nba', index=False, if_exists='replace')
         print('historical_game_schedule has been updated\n\n')
         
     
@@ -226,7 +226,7 @@ class dataHub:
         """, locals())[col_order]
 
         # Write to database
-        # df.to_sql('league_game_schedule', db_con, schema='nba', index=False, if_exists='append')
+        df.to_sql('league_game_schedule', db_con, schema='nba', index=False, if_exists='append')
         print('current_game_schedule has been updated\n\n')
 
     
@@ -266,7 +266,7 @@ class dataHub:
         df = df[~df.duplicated(keep = False)].reset_index(drop=True)
         
         # Write to database
-        # df.to_sql('team_roster', db_con, schema='nba', index=False, if_exists='append')
+        df.to_sql('team_roster', db_con, schema='nba', index=False, if_exists='append')
         print('team_roster has been updated\n\n')
 
 
@@ -309,7 +309,7 @@ class dataHub:
         df_t = read_sql_query("SELECT * FROM nba.transaction_log WHERE date >= '{}'".format(date_from), db_con)
         df = concat([df, df_t], axis=0, ignore_index=True)
         df = df[~df.duplicated(keep = False)].reset_index(drop=True)
-        # df.to_sql('transaction_log', db_con, schema='nba', index=False, if_exists='append')
+        df.to_sql('transaction_log', db_con, schema='nba', index=False, if_exists='append')
         print('\ntransaction_log has been updated\n\n')
         
           
@@ -345,7 +345,7 @@ class dataHub:
         df = DataFrame(df)
         
         # Write to database
-        # df.to_sql('free_agents', db_con, schema='fty', index=False, if_exists='replace')
+        df.to_sql('free_agents', db_con, schema='fty', index=False, if_exists='replace')
         print('free_agents has been updated\n\n')
 
     
@@ -370,7 +370,7 @@ class dataHub:
         df = DataFrame(df)
 
         # Write to database
-        # df.to_sql('league_info', db_con, schema='fty', index=False, if_exists='append')
+        df.to_sql('league_info', db_con, schema='fty', index=False, if_exists='append')
         print('league_info has been updated\n\n')
 
     
@@ -392,7 +392,7 @@ class dataHub:
         df = DataFrame(df)
 
         # Write to database
-        # df.to_sql('league_schedule', db_con, schema='fty', index=False, if_exists='append')
+        df.to_sql('league_schedule', db_con, schema='fty', index=False, if_exists='append')
         print('league_schedule has been updated\n\n')
 
 
@@ -417,7 +417,7 @@ class dataHub:
         df = DataFrame(df)
 
         # Write to database
-        # df.to_sql('competitor_roster', db_con, schema='fty', index=False, if_exists='append')
+        df.to_sql('competitor_roster', db_con, schema='fty', index=False, if_exists='append')
         print('competitor_roster has been updated\n\n')
 
 
@@ -438,7 +438,7 @@ class dataHub:
 
         df_t = read_sql_query("SELECT * FROM fty.recent_activity", db_con)
         df = concat([df, df_t], ignore_index=True).drop_duplicates()
-        # df.to_sql('recent_activity', db_con, schema='fty', index=False, if_exists='replace')
+        df.to_sql('recent_activity', db_con, schema='fty', index=False, if_exists='replace')
         print('recent_activity has been updated\n\n')
     
     
