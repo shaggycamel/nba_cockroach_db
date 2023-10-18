@@ -6,6 +6,7 @@
 
 # Cron shell script
 cron*.sh
+cron.log
 
 ##### ignore R files
 
