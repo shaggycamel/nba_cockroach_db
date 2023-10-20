@@ -5,6 +5,7 @@ import espn_api.basketball as bb
 from os import getcwd
 from requests import get
 from datetime import datetime, date, timedelta
+from dateutil.parser import parse
 from pytz import timezone
 from time import sleep
 from pandas import DataFrame, concat, read_sql_query, to_datetime, to_numeric
@@ -110,12 +111,9 @@ class dataHub:
         # NEED TO UPDATE KEY DATES WITH LATEST DATES IN ORDER FOR SEASON TYPE TO BE CORRECT
 
         col_order = read_sql_query("SELECT column_name FROM util.table_column_order WHERE table_name = 'player_game_log' ORDER BY column_order", db_con)['column_name'].to_list()
-
-        date_from = read_sql_query('SELECT MAX(game_date) FROM nba.player_game_log', db_con)['max'][0]
-        date_from = (date_from + timedelta(days=1)).strftime('%m/%d/%Y')
-        date_to = (date.today() - timedelta(days=2)).strftime('%m/%d/%Y')
-        season_types = read_sql_query("SELECT * FROM util.key_dates WHERE begin_date <= '{}' AND end_date >= '{}'".format(date_from, date_to), db_con)
-        season_types = season_types['season_type'].to_list()
+        date_from = read_sql_query('SELECT MAX(game_date) FROM nba.player_game_log', db_con)['max'][0].strftime('%m/%d/%Y')
+        date_to = datetime.now(timezone('US/Eastern')).date().strftime('%m/%d/%Y')
+        season_types = read_sql_query("SELECT * FROM util.key_dates WHERE begin_date <= '{}' AND end_date >= '{}'".format(date_from, date_to), db_con)['season_type'].to_list()
         if len(season_types)==0: 
             season_types = ['Pre Season']
 
@@ -140,8 +138,8 @@ class dataHub:
             sleep(1)
         print('player:', ix, '/', len(active_players_list))
 
-        # Clean up for ingestion into database
-        df['GAME_DATE'] = to_datetime(df['GAME_DATE']).dt.date
+        # For some reason the date comes out of the API one day behind 
+        df['GAME_DATE'] = [(parse(el) + timedelta(days=1)).date() for el in df['GAME_DATE']]
         df['year_season'] = Season.current_season_year
         df['slug_season'] = Season.current_season
         df = df.rename(snakecase.convert, axis='columns')
@@ -149,7 +147,7 @@ class dataHub:
 
         # Write to database
         df.to_sql('player_game_log', db_con, schema='nba', index=False, if_exists='append')
-        print('player_game_log has been updated to:', datetime.strptime(date_to, '%m/%d/%Y').strftime('%Y-%m-%d'), '\n\n')
+        print('player_game_log has been updated to:', parse(date_to).strftime('%Y-%m-%d'), '\n\n') 
 
 
     def update_past_game_schedule(self, db_con):
