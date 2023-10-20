@@ -121,7 +121,7 @@ class dataHub:
         print('\n--------------------- player_game_log')
         df = DataFrame() 
         for player in active_players_list:
-            for season_type in season_types:
+            for season_type in season_types: 
                 player_game_log = playergamelog.PlayerGameLog(
                     player_id=str(player), 
                     date_from_nullable=date_from, 
@@ -143,11 +143,13 @@ class dataHub:
         df['year_season'] = Season.current_season_year
         df['slug_season'] = Season.current_season
         df = df.rename(snakecase.convert, axis='columns')
+        conversion_cols = ['game_id', 'player_id', 'fgm', 'fga', 'fg3_m', 'fg3_a', 'min', 'ftm', 'fta', 'oreb', 'dreb', 'reb', 'ast', 'stl', 'blk', 'tov', 'pf', 'pts', 'plus_minus', 'video_available']
+        for col in conversion_cols: df[col] = df[col].astype(float)
         df = df[col_order]
 
         # Write to database
         df.to_sql('player_game_log', db_con, schema='nba', index=False, if_exists='append')
-        print('player_game_log has been updated to:', parse(date_to).strftime('%Y-%m-%d'), '\n\n') 
+        print('player_game_log has been updated to:', parse(date_to).strftime('%Y-%m-%d'), '\n\n')
 
 
     def update_past_game_schedule(self, db_con):
