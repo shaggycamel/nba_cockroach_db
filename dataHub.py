@@ -139,7 +139,7 @@ class dataHub:
         print('player:', ix, '/', len(active_players_list))
 
         # For some reason the date comes out of the API one day behind 
-        df['GAME_DATE'] = [(parse(el) + timedelta(days=1)).date() for el in df['GAME_DATE']]
+        df['GAME_DATE'] = [(parse(el)).date() for el in df['GAME_DATE']]
         df['year_season'] = Season.current_season_year
         df['slug_season'] = Season.current_season
         df = df.rename(snakecase.convert, axis='columns')
@@ -164,9 +164,9 @@ class dataHub:
             df = concat([df, hist_game_schedule], ignore_index=True)
             sleep(1)
 
-        df['GAME_ID'] = to_numeric(df['GAME_ID'])
+        df['GAME_ID'] = df['GAME_ID'].astype(float)
         df = df.groupby(['GAME_ID']).head(1)
-        df['GAME_DATE'] = to_datetime(df['GAME_DATE']).dt.date
+        df['GAME_DATE'] = [(parse(el)).date() for el in df['GAME_DATE']]
         df['slug_matchup'] = df['MATCHUP']
         df['opponent'] = df['MATCHUP'].str.replace(r'[ @ | vs. ]', '', regex=True)
         df['opponent'] = df.apply(lambda x: x['opponent'].replace(x['TEAM_ABBREVIATION'], ''), axis=1)
@@ -210,7 +210,7 @@ class dataHub:
             df = concat([df, df_row], ignore_index=True)
         
         # Cast date columns to_date & Create new columns
-        df['game_date'] = to_datetime(df['game_date']).dt.date
+        df['game_date'] = [(parse(el)).date() for el in df['game_date']]
         df['slug_season'] = Season.current_season
         df['slug_matchup'] = df['home_team_slug'] + ' vs. ' + df['away_team_slug']
         df['slug_team_winner'] = None
@@ -222,11 +222,11 @@ class dataHub:
                 key_dates.season_type AS type_season, 
                 df.*
             FROM df
-            LEFT JOIN key_dates ON df.game_date BETWEEN key_dates.begin_date AND key_dates.end_date
+            LEFT JOIN key_dates ON df.game_date >= key_dates.begin_date AND df.game_date <= key_dates.end_date
         """, locals())[col_order]
 
         # Write to database
-        df.to_sql('league_game_schedule', db_con, schema='nba', index=False, if_exists='append')
+        df.to_sql('league_game_schedule', db_con, schema='nba', index=False, if_exists='append') #####
         print('current_game_schedule has been updated\n\n')
 
     
