@@ -139,7 +139,7 @@ class dataHub:
         print('player:', ix, '/', len(active_players_list))
 
         # For some reason the date comes out of the API one day behind 
-        df['GAME_DATE'] = [(parse(el)).date() for el in df['GAME_DATE']]
+        df['GAME_DATE'] = [parse(el).date() for el in df['GAME_DATE']]
         df['year_season'] = Season.current_season_year
         df['slug_season'] = Season.current_season
         df = df.rename(snakecase.convert, axis='columns')
@@ -166,7 +166,7 @@ class dataHub:
 
         df['GAME_ID'] = df['GAME_ID'].astype(float)
         df = df.groupby(['GAME_ID']).head(1)
-        df['GAME_DATE'] = [(parse(el)).date() for el in df['GAME_DATE']]
+        df['GAME_DATE'] = [parse(el).date() for el in df['GAME_DATE']]
         df['slug_matchup'] = df['MATCHUP']
         df['opponent'] = df['MATCHUP'].str.replace(r'[ @ | vs. ]', '', regex=True)
         df['opponent'] = df.apply(lambda x: x['opponent'].replace(x['TEAM_ABBREVIATION'], ''), axis=1)
@@ -210,7 +210,7 @@ class dataHub:
             df = concat([df, df_row], ignore_index=True)
         
         # Cast date columns to_date & Create new columns
-        df['game_date'] = [(parse(el)).date() for el in df['game_date']]
+        df['game_date'] = [parse(el).date() for el in df['game_date']]
         df['slug_season'] = Season.current_season
         df['slug_matchup'] = df['home_team_slug'] + ' vs. ' + df['away_team_slug']
         df['slug_team_winner'] = None
