@@ -112,7 +112,7 @@ class dataHub:
 
         col_order = read_sql_query("SELECT column_name FROM util.table_column_order WHERE table_name = 'player_game_log' ORDER BY column_order", db_con)['column_name'].to_list()
         date_from = (read_sql_query('SELECT MAX(game_date) FROM nba.player_game_log', db_con)['max'][0] + timedelta(days=1)).strftime('%m/%d/%Y')
-        date_to = (datetime.now(timezone('US/Eastern')).date() + timedelta(days=1)).strftime('%m/%d/%Y')
+        date_to = datetime.now(timezone('US/Eastern')).date().strftime('%m/%d/%Y')
         season_types = read_sql_query("SELECT * FROM util.key_dates WHERE begin_date <= '{}' AND end_date >= '{}'".format(date_from, date_to), db_con)['season_type'].to_list()
         if 'All Star' in season_types: 
             season_types = ['All Star']
