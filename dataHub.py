@@ -111,11 +111,11 @@ class dataHub:
         # NEED TO UPDATE KEY DATES WITH LATEST DATES IN ORDER FOR SEASON TYPE TO BE CORRECT
 
         col_order = read_sql_query("SELECT column_name FROM util.table_column_order WHERE table_name = 'player_game_log' ORDER BY column_order", db_con)['column_name'].to_list()
+        # MAYBE ADD PLUS ONE TO DATE_FROM TO STOP DUPLICATION
         date_from = read_sql_query('SELECT MAX(game_date) FROM nba.player_game_log', db_con)['max'][0].strftime('%m/%d/%Y')
         date_to = datetime.now(timezone('US/Eastern')).date().strftime('%m/%d/%Y')
-        season_types = read_sql_query("SELECT * FROM util.key_dates WHERE begin_date <= '{}' AND end_date >= '{}'".format(date_from, date_to), db_con)['season_type'].to_list()
-        if len(season_types)==0: 
-            season_types = ['Pre Season']
+        season_types = read_sql_query("SELECT * FROM util.key_dates WHERE slug_season = '{}' AND end_date >= '{}'".format(Season.current_season, date_to), db_con)['season_type'].to_list()
+        # if len(season_types)==0: season_types = ['Pre Season']
 
         # Connect to API and collect data
         print('\n--------------------- player_game_log')
@@ -138,7 +138,6 @@ class dataHub:
             sleep(1)
         print('player:', ix, '/', len(active_players_list))
 
-        # For some reason the date comes out of the API one day behind 
         df['GAME_DATE'] = [parse(el).date() for el in df['GAME_DATE']]
         df['year_season'] = Season.current_season_year
         df['slug_season'] = Season.current_season
@@ -148,8 +147,9 @@ class dataHub:
         df = df[col_order]
 
         # Write to database
-        df.to_sql('player_game_log', db_con, schema='nba', index=False, if_exists='append')
+        # df.to_sql('player_game_log', db_con, schema='nba', index=False, if_exists='append')
         print('player_game_log has been updated to:', parse(date_to).strftime('%Y-%m-%d'), '\n\n')
+        return df
 
 
     def update_past_game_schedule(self, db_con):
