@@ -342,6 +342,8 @@ class dataHub:
 
         # Clean in prep for database ingestion
         df = DataFrame(df)
+        df['player_team'] = df['player_team'].str.replace('PHL', 'PHI')
+        df['player_team'] = df['player_team'].str.replace('PHO', 'PHX')
         
         # Write to database
         df.to_sql('free_agents', db_con, schema='fty', index=False, if_exists='replace')
@@ -419,9 +421,8 @@ class dataHub:
         df['player_team'] = df['player_team'].str.replace('PHO', 'PHX')
 
         # Write to database
-        # df.to_sql('competitor_roster', db_con, schema='fty', index=False, if_exists='append')
+        df.to_sql('competitor_roster', db_con, schema='fty', index=False, if_exists='append')
         print('competitor_roster has been updated\n\n')
-        return df
 
 
     def fty_get_recent_activity(self, fty_con, db_con):
