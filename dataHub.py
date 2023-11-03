@@ -8,7 +8,7 @@ from datetime import datetime, date, timedelta
 from dateutil.parser import parse
 from pytz import timezone
 from time import sleep
-from pandas import DataFrame, concat, read_sql_query, to_datetime, to_numeric
+from pandas import DataFrame, concat, read_sql_query, to_datetime
 from numpy import where
 from sqlalchemy import create_engine
 from pandasql import sqldf; pysqldf = lambda q: sqldf(q, locals())
@@ -326,6 +326,7 @@ class dataHub:
             espn_s2=fty_creds['espn_s2'], 
             swid=fty_creds['swid']
         )
+
     
     def fty_get_free_agents(self, fty_con, db_con):
         
@@ -361,9 +362,7 @@ class dataHub:
                 'league_name': fty_con.settings.name,
                 'competitor_id': competitor.team_id,
                 'competitor_abbrev': competitor.team_abbrev,
-                'competitor_name_id': competitor.team_name, 
-                'competitor_name': None, # Update manually in database
-                'owner': competitor.owner,
+                'competitor_name': competitor.team_name, 
                 'division_id': competitor.division_id,
                 'division_name': competitor.division_name
             })
@@ -385,9 +384,9 @@ class dataHub:
                     'league_id': fty_con.league_id, 
                     'week': ix + 1, 
                     'competitor_id': competitor.team_id, 
-                    'competitor_name_id': competitor.team_name, 
+                    'competitor_name': competitor.team_name, 
                     'opponent_id': opponent.home_team.team_id if competitor.team_id == opponent.away_team.team_id else opponent.away_team.team_id,
-                    'opponent_name_id': opponent.home_team.team_name if competitor.team_id == opponent.away_team.team_id else opponent.away_team.team_name
+                    'opponent_name': opponent.home_team.team_name if competitor.team_id == opponent.away_team.team_id else opponent.away_team.team_name
                 })
 
         df = DataFrame(df)
@@ -408,7 +407,7 @@ class dataHub:
                     'timestamp': datetime.now(timezone('NZ')), 
                     'league_week': fty_con.currentMatchupPeriod, # fty_con.league_week does not give the current week...
                     'competitor_id': competitor.team_id, 
-                    'competitor_name_id': competitor.team_name, 
+                    'competitor_name': competitor.team_name, 
                     'player_fantasy_id': player.playerId, 
                     'player_name': player.name, 
                     'player_team': player.proTeam,
@@ -433,7 +432,7 @@ class dataHub:
                 df.append({
                     'timestamp': datetime.fromtimestamp(activity.date / 1000),
                     'competitor_id': action[0].team_id,
-                    'competitor_name_id': action[0].team_name,
+                    'competitor_name': action[0].team_name,
                     'action': action[1],
                     'player': action[2] 
                 })
