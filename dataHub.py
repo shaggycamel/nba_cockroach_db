@@ -273,14 +273,14 @@ class dataHub:
 
         print('\n--------------------- transactions')
         col_order = read_sql_query("SELECT column_name FROM util.table_column_order WHERE table_name = 'transaction_log' ORDER BY column_order", db_con)['column_name'].to_list()
-        date_from = read_sql_query('SELECT MAX(date) FROM nba.transaction_log', db_con)['max'][0] - timedelta(days=4) # four days leway, unless records are added late
+        date_from = read_sql_query('SELECT MAX(date) FROM nba.transaction_log', db_con)['max'][0] - timedelta(days=7) # four days leway, unless records are added late
 
         async def search_transactions(starting_row, transaction_type) -> str:
             return await pst.Search(
                 league = pst.League.NBA,
                 transaction_types = [transaction_type], # Needs to list, hence []
                 start_date = date_from,
-                end_date = date.today(),
+                end_date = date.today() + timedelta(2),
                 starting_row = starting_row
             ).get_dict()
         
@@ -443,6 +443,7 @@ class dataHub:
         df = concat([df, df_t], ignore_index=True).drop_duplicates()
         df.to_sql('recent_activity', db_con, schema='fty', index=False, if_exists='replace')
         print('recent_activity has been updated\n\n')
+
     
     
 
