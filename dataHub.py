@@ -225,7 +225,8 @@ class dataHub:
         """, locals())[col_order]
 
         # Write to database
-        df.to_sql('league_game_schedule', db_con, schema='nba', index=False, if_exists='append') #####
+        df.to_sql('league_game_schedule', db_con, schema='nba', index=False, if_exists='append')
+        # return df
         print('current_game_schedule has been updated\n\n')
 
     

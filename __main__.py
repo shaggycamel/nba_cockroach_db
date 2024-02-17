@@ -56,6 +56,9 @@ else:
     update_schedule = read_sql_query("SELECT * FROM util.update_schedule WHERE run_period_start <= '{}' AND run_period_end >= '{}'".format(us_eastern_time, us_eastern_time), db_con)
     
 
+# temp removal of transaction_log, to test if it screws things up
+update_schedule = update_schedule[update_schedule['table_name'] != 'nba.transaction_log']
+
 for _, row in update_schedule.iterrows():
     eval_string = ''.join(['dh.', row['associated_function'], '(', row['function_arguments'], ')'])
     custom_prelog(eval_string, row['table_name'], batch_attempt)
