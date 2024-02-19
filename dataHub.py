@@ -377,6 +377,9 @@ class dataHub:
     
     def fty_get_league_schedule(self, fty_con, db_con):
 
+        # Manually set league start date
+        league_start_date = datetime(2023, 10, 23)
+
         df = []
         for competitor in fty_con.teams:
             for ix, opponent in enumerate(competitor.schedule):
@@ -384,12 +387,14 @@ class dataHub:
                     'season': Season.current_season, 
                     'league_id': fty_con.league_id, 
                     'week': ix + 1, 
+                    'week_start': (league_start_date + timedelta(weeks=ix)).date(),
+                    'week_end': (league_start_date + timedelta(weeks=ix+1) - timedelta(days=1)).date(),
                     'competitor_id': competitor.team_id, 
                     'competitor_name': competitor.team_name, 
                     'opponent_id': opponent.home_team.team_id if competitor.team_id == opponent.away_team.team_id else opponent.away_team.team_id,
                     'opponent_name': opponent.home_team.team_name if competitor.team_id == opponent.away_team.team_id else opponent.away_team.team_name
                 })
-
+        
         df = DataFrame(df)
 
         # Write to database
