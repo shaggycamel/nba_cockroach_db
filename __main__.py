@@ -57,7 +57,7 @@ else:
     
 
 # temp removal of transaction_log, to test if it screws things up
-update_schedule = update_schedule[update_schedule['table_name'] != 'nba.transaction_log']
+# update_schedule = update_schedule[update_schedule['table_name'] != 'nba.transaction_log']
 
 for _, row in update_schedule.iterrows():
     eval_string = ''.join(['dh.', row['associated_function'], '(', row['function_arguments'], ')'])
