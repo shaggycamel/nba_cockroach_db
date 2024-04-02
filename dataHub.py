@@ -8,7 +8,8 @@ from datetime import datetime, date, timedelta
 from dateutil.parser import parse
 from pytz import timezone
 from time import sleep
-from pandas import DataFrame, concat, read_sql_query, to_datetime
+from pandas import DataFrame, concat, read_sql_query, to_datetime # EVENTUALLY REPLACE WITH POLARS
+import polars as pl
 from numpy import where
 from sqlalchemy import create_engine
 from pandasql import sqldf; pysqldf = lambda q: sqldf(q, locals())
@@ -449,6 +450,54 @@ class dataHub:
         df = concat([df, df_t], ignore_index=True).drop_duplicates()
         df.to_sql('recent_activity', db_con, schema='fty', index=False, if_exists='replace')
         print('recent_activity has been updated\n\n')
+
+
+    def fty_get_matchup_box_score(self, fty_con, db_con):
+        # NEED TO TEST IF THIS WORKS
+        # PARTICULARLY ON MONDAY MORNINGS WHERE MATCHUP PERIOD COULD BE WRONG
+
+        df = [] 
+        stats = ['PTS', 'BLK', 'STL', 'AST', 'REB', 'TO', 'FGM', 'FGA', 'FTM', 'FTA', '3PTM', 'FG%', 'FT%']
+
+        period = fty_con.currentMatchupPeriod if date.today().strftime('%a') != 'Mon' else fty_con.currentMatchupPeriod - 1
+        box_score = fty_con.box_scores(matchup_period = period)
+        
+        for matchup in box_score:
+            for h_a in ['home', 'away']:
+                
+                competitor = getattr(matchup, h_a + '_team')
+                competitor_stats = getattr(matchup, h_a + '_stats')
+    
+                df.append(
+                    pl.DataFrame({
+                        ** {
+                            'season': fty_con.year,
+                            'league_id': fty_con.league_id,
+                            'competitor_id': competitor.team_id,
+                            'matchup': period
+                        } ,
+                        ** dict(zip(stats, [competitor_stats[stat]['value'] for stat in stats]))
+                    })
+                )
+                    
+    df = pl.concat(df)
+    df = df.select(pl.all().name.to_lowercase())
+    df = df.rename({'3ptm': 'fg3_m', 'fg%': 'fg_pct', 'ft%': 'ft_pct'})
+
+    # CONCAT WITH QUerY THAT eXCLUDES MATCHUP PERIOD
+    df = pl.concat([
+        pl.read_database(
+            """
+            SELECT * 
+            FROM fty.matchup_box_score 
+            WHERE NOT (season = {} AND league_id = {} AND matchup = {})
+            """.format(fty_con.year, fty_con.league_id, period),
+            db_con
+        ), 
+        df
+    ])
+    
+    # df.write_database('fty.matchup_box_score', db_con.url, if_table_exists='replace')
 
     
     
