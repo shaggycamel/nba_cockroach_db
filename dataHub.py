@@ -480,24 +480,24 @@ class dataHub:
                     })
                 )
                     
-    df = pl.concat(df)
-    df = df.select(pl.all().name.to_lowercase())
-    df = df.rename({'3ptm': 'fg3_m', 'fg%': 'fg_pct', 'ft%': 'ft_pct'})
-
-    # CONCAT WITH QUerY THAT eXCLUDES MATCHUP PERIOD
-    df = pl.concat([
-        pl.read_database(
-            """
-            SELECT * 
-            FROM fty.matchup_box_score 
-            WHERE NOT (season = {} AND league_id = {} AND matchup = {})
-            """.format(fty_con.year, fty_con.league_id, period),
-            db_con
-        ), 
-        df
-    ])
+        df = pl.concat(df)
+        df = df.select(pl.all().name.to_lowercase())
+        df = df.rename({'3ptm': 'fg3_m', 'fg%': 'fg_pct', 'ft%': 'ft_pct', 'to': 'tov'})
     
-    # df.write_database('fty.matchup_box_score', db_con.url, if_table_exists='replace')
+        # CONCAT WITH QUERY THAT eXCLUDES MATCHUP PERIOD
+        df = pl.concat([
+            pl.read_database(
+                """
+                SELECT * 
+                FROM fty.matchup_box_score 
+                WHERE NOT (season = {} AND league_id = {} AND matchup = {})
+                """.format(fty_con.year, fty_con.league_id, period),
+                db_con
+            ), 
+            df
+        ])
+        
+        # df.write_database('fty.matchup_box_score', db_con.url, if_table_exists='replace')
 
     
     
