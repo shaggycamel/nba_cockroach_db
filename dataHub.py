@@ -8,8 +8,7 @@ from datetime import datetime, date, timedelta
 from dateutil.parser import parse
 from pytz import timezone
 from time import sleep
-from pandas import DataFrame, concat, read_sql_query, to_datetime # EVENTUALLY REPLACE WITH POLARS
-import polars as pl
+from pandas import DataFrame, concat, read_sql_query, to_datetime
 from numpy import where
 from sqlalchemy import create_engine
 from pandasql import sqldf; pysqldf = lambda q: sqldf(q, locals())
