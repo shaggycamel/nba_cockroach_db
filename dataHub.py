@@ -469,7 +469,7 @@ class dataHub:
                 competitor_stats = getattr(matchup, h_a + '_stats')
     
                 df.append(
-                    pl.DataFrame({
+                    DataFrame({
                         ** {
                             'season': fty_con.year,
                             'league_id': fty_con.league_id,
@@ -480,13 +480,13 @@ class dataHub:
                     })
                 )
                     
-        df = pl.concat(df)
-        df = df.select(pl.all().name.to_lowercase())
+        df = concat(df)
+        df = df.rename(snakecase.convert, axis='columns')
         df = df.rename({'3ptm': 'fg3_m', 'fg%': 'fg_pct', 'ft%': 'ft_pct', 'to': 'tov'})
     
         # CONCAT WITH QUERY THAT eXCLUDES MATCHUP PERIOD
-        df = pl.concat([
-            pl.read_database(
+        df = concat([
+            read_sql_query(
                 """
                 SELECT * 
                 FROM fty.matchup_box_score 
