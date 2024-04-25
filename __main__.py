@@ -9,7 +9,7 @@ from dataHub import dataHub
 dh = dataHub()
 # db_con = dh.db_connect('postgre')
 db_con = dh.db_connect('cockroach')
-fty_con = dh.fty_api_con()
+# fty_con = dh.fty_api_con() --- commented because old league_id cannot be found on ESPN
 
 print('\nWriting to database:', 'cockroach' if 'cockroach' in str(db_con.url) else 'postgre', '\n\n')
 
