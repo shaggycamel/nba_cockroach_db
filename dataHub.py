@@ -1,6 +1,6 @@
-
 import configparser
 import snakecase
+import re
 import espn_api.basketball as bb
 from os import getcwd
 from requests import get
@@ -13,7 +13,7 @@ from numpy import where
 from sqlalchemy import create_engine
 from pandasql import sqldf; pysqldf = lambda q: sqldf(q, locals())
 
-from nba_api.stats.endpoints import playercareerstats, commonplayerinfo, playergamelog, leaguegamelog, commonteamroster
+from nba_api.stats.endpoints import playercareerstats, commonplayerinfo, playergamelog, leaguegamelog, commonteamroster, boxscoreadvancedv2, boxscoretraditionalv2
 from nba_api.stats.static import players, teams
 from nba_api.stats.library.parameters import Season
 import pro_sports_transactions as pst
@@ -105,6 +105,14 @@ class dataHub:
         # Write to database
         df.to_sql('player_info', db_con, schema='nba', index=False, if_exists='replace')
         print('player_info has been updated\n\n')
+
+    def get_box_scores(self, db_con):
+
+        col_order = read_sql_query("SELECT column_name FROM util.table_column_order WHERE table_name = 'boxscore' ORDER BY column_order", db_con)['column_name'].to_list()
+        max_game_id = (read_sql_query('SELECT MAX(game_id) FROM nba.player_box_score', db_con)['max'][0] + timedelta(days=1)).strftime('%m/%d/%Y')
+        date_to = datetime.now(timezone('US/Eastern')).date().strftime('%m/%d/%Y')
+
+
         
         
     def get_player_game_log(self, db_con):
@@ -150,13 +158,83 @@ class dataHub:
         df.to_sql('player_game_log', db_con, schema='nba', index=False, if_exists='append')
         print('player_game_log has been updated to:', parse(date_to).strftime('%Y-%m-%d'), '\n\n')
 
+    
+    #CREATE NEW PROC TO BRING IN TEAM BOXSCORE AND RATINGS
+    def get_box_score(self, db_con):
+
+        bs_max_dt = (
+            read_sql_query("""
+                SELECT MAX(ls.game_date) 
+                FROM nba.team_box_score AS bs
+                LEFT JOIN nba.league_game_schedule AS ls on bs.game_id = ls.game_id
+            """, db_con)
+            ['max'][0]
+            .strftime('%Y-%m-%d')
+        )
+        
+        game_ids = (
+            read_sql_query(f"""
+                SELECT game_id, game_date
+                FROM nba.league_game_schedule
+                WHERE game_date > '{bs_max_dt}'
+                    AND game_date <= current_date
+            """, db_con)
+        )
+        
+        trad_adv_lst = ['player', 'team']
+        
+        for game_id in game_ids['game_id']:
+            game_id = '00' + str(int(game_id))
+            # print(game_id)
+        
+            dfs = []
+            bsa = boxscoreadvancedv2.BoxScoreAdvancedV2(game_id=game_id)
+            if len(bsa.get_normalized_dict()['PlayerStats']) == 0:
+                continue
+        
+            bst = boxscoretraditionalv2.BoxScoreTraditionalV2(game_id=game_id)
+            
+            for el in [0, 1]:
+        
+                bst_col_order = read_sql_query(f"SELECT column_name FROM util.table_column_order WHERE table_name = '{trad_adv_lst[el]}_box_score_traditional' ORDER BY column_order", db_con)['column_name'].to_list()
+                bsa_col_order = read_sql_query(f"SELECT column_name FROM util.table_column_order WHERE table_name = '{trad_adv_lst[el]}_box_score_advanced' ORDER BY column_order", db_con)['column_name'].to_list()
+                
+                bst_df = (
+                    bst
+                    .get_data_frames()[el]
+                    .rename(snakecase.convert, axis='columns')
+                    .drop_duplicates()
+                    .assign(game_id = lambda x: x['game_id'].astype('int'))
+                    .assign(min = lambda x: [int(re.sub(r'\..*', '', el)) if el is not None else None for el in x['min']])
+                    [bst_col_order]
+                )
+        
+                bsa_df = (
+                    bsa
+                    .get_data_frames()[el]
+                    .rename(snakecase.convert, axis='columns')
+                    .drop_duplicates()
+                    .assign(game_id = lambda x: x['game_id'].astype('int'))
+                    [bsa_col_order]
+                )
+                
+                jn_cols = list(set(bst_df.columns) & set(bsa_df.columns))
+                df = bst_df.merge(bsa_df, how='left', on=jn_cols)
+                dfs.append(df)
+        
+            dfs[0].to_sql('player_box_score', db_con, schema='nba', index=False, if_exists='append')
+            dfs[1].to_sql('team_box_score', db_con, schema='nba', index=False, if_exists='append')
+
+        print('player and team box_score have been updated\n\n')
+
+        
 
     def update_past_game_schedule(self, db_con):
         col_order = read_sql_query("SELECT column_name FROM util.table_column_order WHERE table_name = 'league_game_schedule' ORDER BY column_order", db_con)['column_name'].to_list()
         
         print('\n--------------------- historical_league_game_schedule')
         df = DataFrame() 
-        for type_season in ['Regular Season', 'Pre Season', 'Playoffs', 'All Star', 'All-Star']:
+        for type_season in ['Regular Season', 'Pre Season', 'Playoffs', 'All Star']:
             hist_game_schedule = leaguegamelog.LeagueGameLog(season_type_all_star=type_season, season=Season.current_season_year-1)
             hist_game_schedule = hist_game_schedule.get_data_frames()[0]
             hist_game_schedule['type_season'] = type_season
@@ -216,13 +294,16 @@ class dataHub:
         df['slug_team_loser'] = None
         
         key_dates = read_sql_query('SELECT * FROM util.key_dates', db_con)
-        df = sqldf("""
-            SELECT 
-                key_dates.season_type AS type_season, 
-                df.*
-            FROM df
-            LEFT JOIN key_dates ON df.game_date >= key_dates.begin_date AND df.game_date <= key_dates.end_date
-        """, locals())[col_order]
+        df = (
+            sqldf("""
+                SELECT key_dates.season_type AS type_season, df.*
+                FROM df
+                LEFT JOIN key_dates ON df.game_date >= key_dates.begin_date 
+                    AND df.game_date <= key_dates.end_date
+            """, locals())
+            [col_order]
+            .drop_duplicates()
+        )
 
         # Write to database
         df.to_sql('league_game_schedule', db_con, schema='nba', index=False, if_exists='append')
@@ -313,12 +394,13 @@ class dataHub:
         print('\ntransaction_log has been updated\n\n')
         
           
-    def fty_api_con(self):
+    def fty_api_con(self, league_id):
         """ Create connection object to fanstasy api """
         
         parser = configparser.ConfigParser()
         parser.read(getcwd() + '/database.ini')
         fty_creds = dict(parser.items('fantasy_api'))
+        fty_creds['league_id'] = league_id
         fty_creds['year'] = str(Season.current_season_year+1)
         
         return bb.League(
