@@ -394,24 +394,40 @@ class dataHub:
         print('\ntransaction_log has been updated\n\n')
         
           
-    def fty_api_con(self, league_id):
+    def fty_con(self, db_con):
         """ Create connection object to fanstasy api """
+
+        df_leagues = df = read_sql_query(f"SELECT platform, league_id FROM fty.league WHERE season = 'Season.current_season'", db_con)
         
         parser = configparser.ConfigParser()
         parser.read(getcwd() + '/database.ini')
-        fty_creds = dict(parser.items('fantasy_api'))
-        fty_creds['league_id'] = league_id
-        fty_creds['year'] = str(Season.current_season_year+1)
-        
-        return bb.League(
-            league_id=int(fty_creds['league_id']),
-            year=int(fty_creds['year']),
-            espn_s2=fty_creds['espn_s2'], 
-            swid=fty_creds['swid']
-        )
+
+        fty_con = {}
+        for _, row in df.iterrows():
+            fty_creds = dict(parser.items(row['platform'].str.lower + '_api'))
+            fty_creds['league_id'] = row['league_id']
+            
+            if row['platform'] == 'ESPN':
+                fty_creds['year'] = str(Season.current_season_year+1)
+                
+                fty_con[row['league_id']] = bb.League(
+                    league_id=int(fty_creds['league_id']),
+                    year=int(fty_creds['year']),
+                    espn_s2=fty_creds['espn_s2'], 
+                    swid=fty_creds['swid']
+                )
+                
+            elif row['platform'] == 'Yahoo':
+                fty_creds['token_time'] = float(fty_creds['token_time'])
+                
+                fty_con[row['league_id']] == YahooFantasySportsQuery(
+                    league_id=fty_creds['league_id'],
+                    game_code="nba",
+                    yahoo_access_token_json=fty_creds
+                )
 
     
-    def fty_get_free_agents(self, fty_con, db_con):
+    def espn_get_free_agents(self, fty_con, db_con):
         
         df = []
         for free_agent in fty_con.free_agents(size=1000):
@@ -428,19 +444,23 @@ class dataHub:
         df = DataFrame(df)
         df['player_team'] = df['player_team'].str.replace('PHL', 'PHI')
         df['player_team'] = df['player_team'].str.replace('PHO', 'PHX')
+
+        # ADD SEASON, PLATFORM, LEAGUE_ID
+        # WHEN UPDATING, TRUNCATE RELEVANT RECORDS AND APPEND, INSTEAD OF REPLACE
         
         # Write to database
         df.to_sql('free_agents', db_con, schema='fty', index=False, if_exists='replace')
         print('free_agents has been updated\n\n')
 
     
-    def fty_get_league_info(self, fty_con, db_con):
+    def espn_get_league_info(self, fty_con, db_con):
 
         df = []
         for competitor in fty_con.teams:
             df.append({
                 'season': Season.current_season,
                 'season_year': Season.current_season_year,
+                # 'platform': , INSERT HERE
                 'league_id': fty_con.league_id,
                 'league_name': fty_con.settings.name,
                 'competitor_id': competitor.team_id,
@@ -451,13 +471,14 @@ class dataHub:
             })
             
         df = DataFrame(df)
+        return df
 
         # Write to database
-        df.to_sql('league_info', db_con, schema='fty', index=False, if_exists='append')
-        print('league_info has been updated\n\n')
+        # df.to_sql('league_info', db_con, schema='fty', index=False, if_exists='append')
+        # print('league_info has been updated\n\n')
 
     
-    def fty_get_league_schedule(self, fty_con, db_con):
+    def espn_get_league_schedule(self, fty_con, db_con):
 
         # Manually set league start date
         league_start_date = datetime(2023, 10, 23)
@@ -476,6 +497,8 @@ class dataHub:
                     'opponent_id': opponent.home_team.team_id if competitor.team_id == opponent.away_team.team_id else opponent.away_team.team_id,
                     'opponent_name': opponent.home_team.team_name if competitor.team_id == opponent.away_team.team_id else opponent.away_team.team_name
                 })
+
+        # NEED TO ADD PLATOFRM
         
         df = DataFrame(df)
 
@@ -484,7 +507,7 @@ class dataHub:
         print('league_schedule has been updated\n\n')
 
 
-    def fty_get_competitor_roster(self, fty_con, db_con):
+    def espn_get_competitor_roster(self, fty_con, db_con):
 
         df = []
         for competitor in fty_con.teams:
@@ -502,6 +525,8 @@ class dataHub:
                     'player_injury_status': player.injuryStatus,
                     'player_acquisition_type': player.acquisitionType
                 })
+
+        # ADD PLATFORM HERE
         
         df = DataFrame(df)
         df['player_team'] = df['player_team'].str.replace('PHL', 'PHI')
@@ -512,7 +537,7 @@ class dataHub:
         print('competitor_roster has been updated\n\n')
 
 
-    def fty_get_recent_activity(self, fty_con, db_con):
+    def espn_get_recent_activity(self, fty_con, db_con):
 
         df = []
         for activity in fty_con.recent_activity(size=50):
@@ -527,13 +552,15 @@ class dataHub:
         
         df = DataFrame(df)
 
+        # NEED TO ADD SEASON, PLATFORM, LEAGUE_ID
+
         df_t = read_sql_query("SELECT * FROM fty.recent_activity", db_con)
         df = concat([df, df_t], ignore_index=True).drop_duplicates()
         df.to_sql('recent_activity', db_con, schema='fty', index=False, if_exists='replace')
         print('recent_activity has been updated\n\n')
 
 
-    def fty_get_matchup_box_score(self, fty_con, db_con):
+    def espn_get_matchup_box_score(self, fty_con, db_con):
         # NEED TO TEST IF THIS WORKS
         # PARTICULARLY ON MONDAY MORNINGS WHERE MATCHUP PERIOD COULD BE WRONG
 
@@ -560,6 +587,8 @@ class dataHub:
                         ** dict(zip(stats, [competitor_stats[stat]['value'] for stat in stats]))
                     })
                 )
+
+        # ADD PLATFORM HERE
                     
         df = concat(df)
         df = df.rename(snakecase.convert, axis='columns')
@@ -579,6 +608,7 @@ class dataHub:
         ])
         
         # df.write_database('fty.matchup_box_score', db_con.url, if_table_exists='replace')
+
 
     
     
