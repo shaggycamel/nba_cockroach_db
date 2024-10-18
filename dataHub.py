@@ -56,7 +56,8 @@ class dataHub:
         """ Season stats (totals) """
 
         col_order = read_sql("SELECT column_name FROM util.table_column_order WHERE table_name = 'player_season_stats' ORDER BY column_order", db_con)['column_name'].to_list()
-
+        active_players_list = [el['id'] for el in players.get_active_players()]
+        
         print('\n--------------------- player season stats')
         df = DataFrame()
         for player in active_players_list:
@@ -119,16 +120,6 @@ class dataHub:
 
     
 
-    
-    def get_box_scores(self, db_con):
-
-        col_order = read_sql("SELECT column_name FROM util.table_column_order WHERE table_name = 'boxscore' ORDER BY column_order", db_con)['column_name'].to_list()
-        max_game_id = (read_sql('SELECT MAX(game_id) FROM nba.player_box_score', db_con)['max'][0] + timedelta(days=1)).strftime('%m/%d/%Y')
-        date_to = datetime.now(timezone('US/Eastern')).date().strftime('%m/%d/%Y')
-
-
-        
-        
     def get_player_game_log(self, db_con):
         # NEED TO UPDATE KEY DATES WITH LATEST DATES IN ORDER FOR SEASON TYPE TO BE CORRECT
 
@@ -175,7 +166,7 @@ class dataHub:
 
 
     
-    #CREATE NEW PROC TO BRING IN TEAM BOXSCORE AND RATINGS
+    # NEED TO CHECK IF WORKS
     def get_box_score(self, db_con):
 
         bs_max_dt = (
@@ -192,8 +183,7 @@ class dataHub:
             read_sql(f"""
                 SELECT game_id, game_date
                 FROM nba.league_game_schedule
-                WHERE game_date > '{bs_max_dt}'
-                    AND game_date <= current_date
+                WHERE game_date > '{bs_max_dt}' AND game_date <= current_date
             """, db_con)
         )
         
@@ -448,30 +438,30 @@ class dataHub:
                 
                 fty_con['Yahoo;' + str(row[1]['league_id'])] = YahooFantasySportsQuery(
                     league_id=fty_creds['league_id'],
-                    game_code="nba",
+                    game_code='nba',
                     yahoo_access_token_json=fty_creds
                 )
+
+                # Set game_id attribute
+                fty_con['Yahoo;' + str(row[1]['league_id'])].game_id = \
+                    int(fty_con['Yahoo;' + str(row[1]['league_id'])].get_league_key(Season.current_season_year)[0:3])
                 
         return fty_con
 
 
 
-    # ADD YAHOO    
     def fty_get_free_agents(self, fty_con, db_con):
 
         for con in fty_con:
             if con.startswith('ESPN'):
-                df1 = self._espn_get_free_agents(fty_con[con])
+                df = self._espn_get_free_agents(fty_con[con])
             elif con.startswith('Yahoo'):
-                df2 = self._yahoo_get_free_agents(fty_con[con])
+                df = self._yahoo_get_free_agents(fty_con[con])
 
             # Write to database
-            # FIX COL ORDER ????
-            # db_con.connect().execute(text(f"DELETE FROM fty.free_agents WHERE season = '{Season.current_season}' AND platform = '{con.split(';')[0]}' AND league = {con.split(';')[1]}"))
-            # df.to_sql('free_agents', db_con, schema='fty', index=False, if_exists='append')
-            
-        print('free_agents has been updated\n\n')
-        return concat([df1, df2])
+            db_con.connect().execute(text(f"DELETE FROM fty.free_agents WHERE season = '{Season.current_season}' AND platform = '{con.split(';')[0]}' AND league_id = {con.split(';')[1]}"))
+            df.to_sql('free_agents', db_con, schema='fty', index=False, if_exists='append')
+            print(con + ' free_agents has been updated\n\n')
 
     def _espn_get_free_agents(self, fty_con):
         
@@ -491,7 +481,6 @@ class dataHub:
 
         return DataFrame(df)
 
-    # something wrong here
     def _yahoo_get_free_agents(self, fty_con):
         
         df = []
@@ -517,15 +506,13 @@ class dataHub:
 
         for con in fty_con:
             if con.startswith('ESPN'):
-                df1 = self._espn_get_league_competitor(fty_con[con])
+                df = self._espn_get_league_competitor(fty_con[con])
             elif con.startswith('Yahoo'):
-                df2 = self._yahoo_get_league_competitor(fty_con[con])
+                df = self._yahoo_get_league_competitor(fty_con[con])
 
             # Write to database
-            # df.to_sql('league_competitor', db_con, schema='fty', index=False, if_exists='append')
-           
-        print('league_competitor has been updated\n\n')
-        return concat([df1, df2])
+            df.to_sql('league_competitor', db_con, schema='fty', index=False, if_exists='append')
+            print(con + ' league_competitor has been updated\n\n')
         
 
     def _espn_get_league_competitor(self, fty_con):
@@ -536,17 +523,13 @@ class dataHub:
                 'season': Season.current_season,
                 'platform': 'ESPN',
                 'league_id': fty_con.league_id,
-                # 'league_name': fty_con.settings.name, DELETE
                 'competitor_id': competitor.team_id,
                 'competitor_abbrev': competitor.team_abbrev,
-                'competitor_name': competitor.team_name, 
-                'division_id': competitor.division_id, # DELETE
-                'division_name': competitor.division_name # DELETE
+                'competitor_name': competitor.team_name
             })
             
         return DataFrame(df)
 
-    # TWEAK REQ
     def _yahoo_get_league_competitor(self, fty_con):
 
         df = []
@@ -556,31 +539,26 @@ class dataHub:
                 'season': Season.current_season,
                 'platform': 'Yahoo',
                 'league_id': fty_con.league_id,
-                # 'league_name': fty_con.get_league_metadata().name.decode(),
                 'competitor_id': competitor.team_id,
                 'competitor_abbrev': competitor.managers[0].nickname,
-                'competitor_name': competitor.name.decode(),
-                'division_id': None, # DELETE
-                'division_name': None # DELETE
+                'competitor_name': competitor.name.decode()
             })
         
         return DataFrame(df)
 
 
 
-    # TESTING REQ
     def fty_get_league_schedule(self, fty_con, db_con):
 
         for con in fty_con:
             if con.startswith('ESPN'):
-                df1 = self._espn_get_league_schedule(fty_con[con], db_con)
+                df = self._espn_get_league_schedule(fty_con[con], db_con)
             elif con.startswith('Yahoo'):
-                df2 = self._yahoo_get_league_schedule(fty_con[con])
+                df = self._yahoo_get_league_schedule(fty_con[con])
 
             # Write to database
-            # df.to_sql('league_schedule', db_con, schema='fty', index=False, if_exists='append')
-        print('league_schedule has been updated\n\n')
-        return concat([df1, df2])
+            df.to_sql('league_schedule', db_con, schema='fty', index=False, if_exists='append')
+            print(con + ' league_schedule has been updated\n\n')
 
     def _espn_get_league_schedule(self, fty_con, db_con):
 
@@ -598,9 +576,7 @@ class dataHub:
                     'week_start': (league_start_date + timedelta(weeks=ix)),
                     'week_end': (league_start_date + timedelta(weeks=ix+1) - timedelta(days=1)),
                     'competitor_id': competitor.team_id, 
-                    # 'competitor_name': competitor.team_name, # DELETE
-                    'opponent_id': opponent.home_team.team_id if competitor.team_id == opponent.away_team.team_id else opponent.away_team.team_id,
-                    # 'opponent_name': opponent.home_team.team_name if competitor.team_id == opponent.away_team.team_id else opponent.away_team.team_name # DELETE
+                    'opponent_id': opponent.home_team.team_id if competitor.team_id == opponent.away_team.team_id else opponent.away_team.team_id
                 })
                 
         return DataFrame(df)
@@ -619,9 +595,7 @@ class dataHub:
                     'week_start': match.week_start,
                     'week_end': match.week_end,
                     'competitor_id': team_id,
-                    # 'competitor_name': None, # DELETE
-                    'opponent_id': match.teams[1].team_id,
-                    # 'opponent_name': None # DELETE
+                    'opponent_id': match.teams[1].team_id
                 })
                 
         return DataFrame(df)
@@ -631,14 +605,13 @@ class dataHub:
 
         for con in fty_con:
             if con.startswith('ESPN'):
-                df1 = self._espn_get_competitor_roster(fty_con[con])
+                df = self._espn_get_competitor_roster(fty_con[con])
             elif con.startswith('Yahoo'):
-                df2 = self._yahoo_get_competitor_roster(fty_con[con])
+                df = self._yahoo_get_competitor_roster(fty_con[con])
 
-        # Write to database
-        # df.to_sql('competitor_roster', db_con, schema='fty', index=False, if_exists='append')
-        print('competitor_roster has been updated\n\n')
-        return concat([df1, df2])
+            # Write to database
+            df.to_sql('competitor_roster', db_con, schema='fty', index=False, if_exists='append')
+            print(con + ' competitor_roster has been updated\n\n')
 
     def _espn_get_competitor_roster(self, fty_con):
 
@@ -650,9 +623,8 @@ class dataHub:
                     'platform': 'ESPN',
                     'league_id': fty_con.league_id, 
                     'timestamp': datetime.now(timezone('NZ')), 
-                    'league_week': fty_con.currentMatchupPeriod, # fty_con.league_week does not give the current week...
+                    'league_week': fty_con.currentMatchupPeriod,
                     'competitor_id': competitor.team_id, 
-                    # 'competitor_name': competitor.team_name, # DELETE
                     'player_fantasy_id': player.playerId, 
                     'player_name': player.name, 
                     'player_team': player.proTeam.replace('PHL', 'PHI').replace('PHO', 'PHX'),
@@ -674,7 +646,6 @@ class dataHub:
                     'timestamp': datetime.now(timezone('NZ')),
                     'league_week': fty_con.get_league_info().current_week,
                     'competitor_id': team_id,
-                #    # competitor_name: ,
                     'player_fantasy_id': player['player'].player_id,
                     'player_name': player['player'].name.full,
                     'player_team': player['player'].editorial_team_abbr,
@@ -686,19 +657,17 @@ class dataHub:
 
 
 
-    # ADD YAHOO  
     def fty_get_recent_activity(self, fty_con, db_con):
         
         for con in fty_con:
             if con.startswith('ESPN'):
-                df1 = self._espn_get_recent_activity(fty_con[con], db_con)
+                df = self._espn_get_recent_activity(fty_con[con], db_con)
             elif con.startswith('Yahoo'):
-                df2 = self._yahoo_get_recent_activity(fty_con[con], db_con)
+                df = self._yahoo_get_recent_activity(fty_con[con], db_con)
 
-        # Write to database
-        # df.to_sql('recent_activity', db_con, schema='fty', index=False, if_exists='append')
-        print('recent_activity has been updated\n\n')
-        return concat([df1, df2])
+            # Write to database
+            df.to_sql('recent_activity', db_con, schema='fty', index=False, if_exists='append')
+            print(con + ' recent_activity has been updated\n\n')
 
     def _espn_get_recent_activity(self, fty_con, db_con):
 
@@ -711,7 +680,6 @@ class dataHub:
                     'league_id': fty_con.league_id,
                     'timestamp': datetime.fromtimestamp(activity.date / 1000),
                     'competitor_id': action[0].team_id,
-                    # 'competitor_name': action[0].team_name, # DELETE
                     'action': action[1],
                     'player': action[2] 
                 })
@@ -720,7 +688,6 @@ class dataHub:
         df = DataFrame(df).merge(df_t, how='outer', indicator=True)
         return df[(df._merge=='left_only')].drop('_merge', axis=1)
 
-    # CHK
     def _yahoo_get_recent_activity(self, fty_con, db_con):
 
         df = []
@@ -744,16 +711,17 @@ class dataHub:
         return df[(df._merge=='left_only')].drop('_merge', axis=1)
 
 
-    # ADD YAHOO  
+    # CHECK THIS ONE CAREFULLY. IT CAN BE IMPROVED!!! 
     def fty_get_matchup_box_score(self, fty_con, db_con):
 
         for con in fty_con:
             if con.startswith('ESPN'):
                 df = self._espn_get_matchup_box_score(fty_con[con])
-            elif con.startswith('Yahoo'):
-                df = self._yahoo_get_matchup_box_score(fty_con[con])
+            # elif con.startswith('Yahoo'):
+            #     df = self._yahoo_get_matchup_box_score(fty_con[con])
 
-        # df.write_database('fty.matchup_box_score', db_con.url, if_table_exists='replace')
+            # df.write_database('fty.matchup_box_score', db_con.url, if_table_exists='replace')
+            # print('has been updated')
 
     def _espn_get_matchup_box_score(self, fty_con):
         
@@ -776,6 +744,7 @@ class dataHub:
                     DataFrame({
                         ** {
                             'season': fty_con.year,
+                            'platform': 'ESPN',
                             'league_id': fty_con.league_id,
                             'competitor_id': competitor.team_id,
                             'matchup': period
@@ -784,13 +753,11 @@ class dataHub:
                     })
                 )
 
-        # ADD PLATFORM HERE
-                    
         df = concat(df)
         df = df.rename(snakecase.convert, axis='columns')
         df = df.rename({'3ptm': 'fg3_m', 'fg%': 'fg_pct', 'ft%': 'ft_pct', 'to': 'tov'})
     
-        # CONCAT WITH QUERY THAT eXCLUDES MATCHUP PERIOD
+        # CONCAT WITH QUERY THAT EXCLUDES MATCHUP PERIOD
         return concat([
             read_sql(
                 """
