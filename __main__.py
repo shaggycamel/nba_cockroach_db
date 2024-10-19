@@ -7,9 +7,9 @@ from sqlalchemy.dialects.postgresql.base import PGDialect; PGDialect._get_server
 from dataHub import dataHub
 
 dh = dataHub()
-# db_con = dh.db_connect('postgre')
-db_con = dh.db_connect('cockroach')
-# fty_con = dh.fty_api_con() --- commented because old league_id cannot be found on ESPN
+db_con = dh.db_connect('postgre')
+# db_con = dh.db_connect('cockroach')
+fty_con = dh.fty_con(db_con)
 
 print('\nWriting to database:', 'cockroach' if 'cockroach' in str(db_con.url) else 'postgre', '\n\n')
 
@@ -37,31 +37,42 @@ batch_attempt = read_sql_query("SELECT MAX(batch_attempt) FROM util.update_log W
 batch_attempt = 1 if batch_attempt[0] is None else batch_attempt[0] + 1
 
 DataFrame(
-    data = {'table_name': 'process start', 'process_date': datetime.now(timezone('NZ')), 'batch_attempt': batch_attempt, 'successful_run': True, 'error_message': None}, 
+    data = {
+        'table_name': 'process start', 
+        'process_date': datetime.now(timezone('NZ')), 
+        'batch_attempt': batch_attempt, 
+        'successful_run': True, 
+        'error_message': None
+    }, 
     index=[0]
 ).to_sql('update_log', db_con, schema='util', index=False, if_exists='append')
 
 
 #################################### Obtain update_schedule filtering on US Eastern Time
 #################################### Loop through update schedule and update objects accordingly
+
+# Used to be used in SQL query
 us_eastern_time = datetime.now(timezone('US/Eastern')).strftime('%Y-%m-%d')
+
 try:
     # this determines if code was run interactively
-    if argv[1] != '-f': reattempt_objs = argv[1].replace(",", "','")
+    if argv[1] != '-f': 
+        alt_freq_objs = argv[1].replace(",", "','")
 except IndexError as e: pass
 
-if 'reattempt_objs' in locals(): 
-    update_schedule = read_sql_query("SELECT * FROM util.update_schedule WHERE table_name IN ('{}')".format(reattempt_objs), db_con)
+if 'alt_freq_objs' in locals(): 
+    update_schedule = read_sql_query(f"SELECT * FROM util.update_schedule WHERE table_name IN ('{alt_freq_objs}')", db_con)
 else:
-    update_schedule = read_sql_query("SELECT * FROM util.update_schedule WHERE run_period_start <= '{}' AND run_period_end >= '{}' AND pause IS FALSE".format(us_eastern_time, us_eastern_time), db_con)
-    
+    # update_schedule = read_sql_query(f"SELECT * FROM util.update_schedule WHERE run_period_start <= '{us_eastern_time}' AND run_period_end >= '{us_eastern_time}' AND pause IS FALSE", db_con)
+    update_schedule = read_sql_query(f"SELECT * FROM util.update_schedule WHERE pause IS FALSE ORDER BY table_name DESC", db_con)
+
 for _, row in update_schedule.iterrows():
     eval_string = ''.join(['dh.', row['associated_function'], '(', row['function_arguments'], ')'])
     custom_prelog(eval_string, row['table_name'], batch_attempt)
         
 
 #################################### Log end of process
-failed_objects = read_sql_query("SELECT table_name, error_message FROM util.update_log WHERE successful_run = 'false' AND process_date::DATE = '{}' AND batch_attempt = {}".format(nz_date, batch_attempt), db_con)
+failed_objects = read_sql_query(f"SELECT table_name, error_message FROM util.update_log WHERE successful_run = 'false' AND process_date::DATE = '{nz_date}' AND batch_attempt = {batch_attempt}", db_con)
 
 DataFrame(
     data = {'table_name': 'process end', 'process_date': datetime.now(timezone('NZ')), 'batch_attempt': batch_attempt, 'successful_run': False if len(failed_objects) > 0 else True, 'error_message': None}, 
