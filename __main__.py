@@ -7,9 +7,9 @@ from sqlalchemy.dialects.postgresql.base import PGDialect; PGDialect._get_server
 from dataHub import dataHub
 
 dh = dataHub()
-# db_con = dh.db_connect('postgre')
-db_con = dh.db_connect('cockroach')
-# fty_con = dh.fty_api_con() --- commented because old league_id cannot be found on ESPN
+db_con = dh.db_connect('postgre')
+# db_con = dh.db_connect('cockroach')
+fty_con = dh.fty_api_con(db_con)
 
 print('\nWriting to database:', 'cockroach' if 'cockroach' in str(db_con.url) else 'postgre', '\n\n')
 
@@ -51,9 +51,9 @@ try:
 except IndexError as e: pass
 
 if 'reattempt_objs' in locals(): 
-    update_schedule = read_sql_query("SELECT * FROM util.update_schedule WHERE table_name IN ('{}')".format(reattempt_objs), db_con)
+    update_schedule = read_sql_query(f"SELECT * FROM util.update_schedule WHERE table_name IN ('{reattempt_objs}')", db_con)
 else:
-    update_schedule = read_sql_query("SELECT * FROM util.update_schedule WHERE run_period_start <= '{}' AND run_period_end >= '{}' AND pause IS FALSE".format(us_eastern_time, us_eastern_time), db_con)
+    update_schedule = read_sql_query(f"SELECT * FROM util.update_schedule WHERE run_period_start <= '{us_eastern_time}' AND run_period_end >= '{us_eastern_time}' AND pause IS FALSE", db_con)
     
 for _, row in update_schedule.iterrows():
     eval_string = ''.join(['dh.', row['associated_function'], '(', row['function_arguments'], ')'])
@@ -61,7 +61,7 @@ for _, row in update_schedule.iterrows():
         
 
 #################################### Log end of process
-failed_objects = read_sql_query("SELECT table_name, error_message FROM util.update_log WHERE successful_run = 'false' AND process_date::DATE = '{}' AND batch_attempt = {}".format(nz_date, batch_attempt), db_con)
+failed_objects = read_sql_query(f"SELECT table_name, error_message FROM util.update_log WHERE successful_run = 'false' AND process_date::DATE = '{nz_date}' AND batch_attempt = {batch_attempt}", db_con)
 
 DataFrame(
     data = {'table_name': 'process end', 'process_date': datetime.now(timezone('NZ')), 'batch_attempt': batch_attempt, 'successful_run': False if len(failed_objects) > 0 else True, 'error_message': None}, 

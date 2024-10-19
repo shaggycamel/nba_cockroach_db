@@ -121,7 +121,6 @@ class dataHub:
     
 
     def get_player_game_log(self, db_con):
-        # NEED TO UPDATE KEY DATES WITH LATEST DATES IN ORDER FOR SEASON TYPE TO BE CORRECT
 
         col_order = read_sql("SELECT column_name FROM util.table_column_order WHERE table_name = 'player_game_log' ORDER BY column_order", db_con)['column_name'].to_list()
         date_from = (read_sql('SELECT MAX(game_date) FROM nba.player_game_log', db_con)['max'][0] + timedelta(days=1)).strftime('%m/%d/%Y')
@@ -316,14 +315,12 @@ class dataHub:
 
         # Write to database
         df.to_sql('league_game_schedule', db_con, schema='nba', index=False, if_exists='append')
-        # return df
         print('current_game_schedule has been updated\n\n')
 
 
 
     
     def get_team_roster(self, db_con):
-
         col_order = read_sql("SELECT column_name FROM util.table_column_order WHERE table_name = 'team_roster' ORDER BY column_order", db_con)['column_name'].to_list()
         
         print('\n--------------------- commonteamroster')
@@ -373,7 +370,7 @@ class dataHub:
         async def search_transactions(starting_row, transaction_type) -> str:
             return await pst.Search(
                 league = pst.League.NBA,
-                transaction_types = [transaction_type], # Needs to list, hence []
+                transaction_types = [transaction_type], # Needs to be list, hence []
                 start_date = date_from,
                 end_date = date.today() + timedelta(2),
                 starting_row = starting_row
@@ -548,6 +545,7 @@ class dataHub:
 
 
 
+    
     def fty_get_league_schedule(self, fty_con, db_con):
 
         for con in fty_con:
@@ -580,7 +578,6 @@ class dataHub:
                 })
                 
         return DataFrame(df)
-        
 
     def _yahoo_get_league_schedule(self, fty_con):
         
@@ -600,6 +597,8 @@ class dataHub:
                 
         return DataFrame(df)
 
+
+    
 
     def fty_get_competitor_roster(self, fty_con, db_con):
 
@@ -655,6 +654,7 @@ class dataHub:
         
         return DataFrame(df)
 
+    
 
 
     def fty_get_recent_activity(self, fty_con, db_con):
