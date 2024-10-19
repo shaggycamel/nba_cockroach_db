@@ -9,8 +9,8 @@
 - [x] Add most up to date data in all `fty/nba` tables
 - [x] Transport all working postgres tables to cockroach
 - [x] Update requirements.txt
-- [ ] update software on raspberry-pi
-- [ ] pull latest code to raspberry-pi
+- [x] update software on raspberry-pi
+- [x] pull latest code to raspberry-pi
 - [ ] edit raspberry-pi cron job
 
 

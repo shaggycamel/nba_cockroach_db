@@ -247,6 +247,7 @@ class dataHub:
             df = concat([df, hist_game_schedule], ignore_index=True)
             sleep(1)
 
+        df['season'] = df['slug_season']
         df['GAME_ID'] = df['GAME_ID'].astype(float)
         df = df.groupby(['GAME_ID']).head(1)
         df['GAME_DATE'] = [parse(el).date() for el in df['GAME_DATE']]
@@ -259,7 +260,7 @@ class dataHub:
         df = df.rename(snakecase.convert, axis='columns')
         df = df[col_order]
         
-        df_t = read_sql("SELECT * FROM nba.league_game_schedule WHERE slug_season != '{}'".format(Season.previous_season), db_con)
+        df_t = read_sql(f"SELECT * FROM nba.league_game_schedule WHERE season != '{Season.previous_season}'", db_con)
         df = concat([df_t, df], ignore_index=True).drop_duplicates()
         df.to_sql('league_game_schedule', db_con, schema='nba', index=False, if_exists='replace')
         print('nba.historical_game_schedule has been updated\n\n')
@@ -296,7 +297,7 @@ class dataHub:
         
         # Cast date columns to_date & Create new columns
         df['game_date'] = [parse(el).date() for el in df['game_date']]
-        df['slug_season'] = Season.current_season
+        df['season'] = Season.current_season
         df['slug_matchup'] = df['home_team_slug'] + ' vs. ' + df['away_team_slug']
         df['slug_team_winner'] = None
         df['slug_team_loser'] = None
