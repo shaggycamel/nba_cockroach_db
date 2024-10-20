@@ -301,11 +301,12 @@ class dataHub:
         df['slug_matchup'] = df['home_team_slug'] + ' vs. ' + df['away_team_slug']
         df['slug_team_winner'] = None
         df['slug_team_loser'] = None
-        
+
+        # potentially remove this from process
         key_dates = read_sql('SELECT * FROM util.key_dates', db_con)
         df = (
             sqldf("""
-                SELECT key_dates.season_type AS type_season, df.*
+                SELECT key_dates.season_type, df.*
                 FROM df
                 LEFT JOIN key_dates ON df.game_date >= key_dates.begin_date 
                     AND df.game_date <= key_dates.end_date
