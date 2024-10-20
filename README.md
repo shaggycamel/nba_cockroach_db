@@ -18,4 +18,6 @@
 - [ ] fix duplicate records in `nba.team_roster` table
 - [ ] Somehow caputre player trades
 - [ ] Obtain player salaries
+- [ ] Delete `util.fty_nba_id_matchup`
+- [ ] Delete `nba.player_game_log`
 

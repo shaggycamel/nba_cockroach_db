@@ -37,7 +37,6 @@ class dataHub:
         self
 
 
-
     
     def db_connect(self, platform):
         """ Establish connection to desired platform """
@@ -72,12 +71,13 @@ class dataHub:
 
         # Clean up for ingestion into database
         df = df.rename(snakecase.convert, axis='columns')
+        df = df.rename(columns = {'season_id': 'season'})
         df = df[col_order]
 
         # Combine with existing dataset & latest record per season/player
         df_t = read_sql('SELECT * FROM nba.player_season_stats', db_con)
         df = concat([df, df_t], ignore_index=True)
-        df = df.sort_values(['season_id', 'player_id'], ascending=False).groupby(['season_id', 'player_id']).head(1)
+        df = df.sort_values(['season', 'player_id'], ascending=False).groupby(['season', 'player_id']).head(1)
 
         # Write to database
         df.to_sql('player_season_stats', db_con, schema='nba', index=False, if_exists='replace')
@@ -107,12 +107,12 @@ class dataHub:
         df['WEIGHT'] = [None if (el is None or el == '') else el for el in df['WEIGHT']]
         df['HEIGHT_CM'] = [round((float(el[0]) * 12 + float(el[1])) * 2.54, 2) if el is not None else None for el in df['HEIGHT'].str.split('-')]
         df['WEIGHT_KG'] = [round(float(el) / 2.2046, 3) if el is not None else None for el in df['WEIGHT']]
-        df = df.rename(snakecase.convert, axis='columns')
+        df = df.rename(snakecase.convert, axis='columns').rename(columns = {'person_id': 'player_id'})
         df = df[col_order]
 
         df_t = read_sql('SELECT * FROM nba.player_info', db_con)
         df = concat([df, df_t], ignore_index=True)
-        df = df.sort_values(['to_year', 'games_played_current_season_flag'], ascending=False).groupby('person_id').head(1)
+        df = df.sort_values(['to_year', 'games_played_current_season_flag'], ascending=False).groupby('player_id').head(1)
 
         # Write to database
         df.to_sql('player_info', db_con, schema='nba', index=False, if_exists='replace')
@@ -225,6 +225,7 @@ class dataHub:
                 
                 jn_cols = list(set(bst_df.columns) & set(bsa_df.columns))
                 df = bst_df.merge(bsa_df, how='left', on=jn_cols)
+                df = df.rename(columns = {'to': 'tov'})
                 dfs.append(df)
         
             dfs[0].to_sql('player_box_score', db_con, schema='nba', index=False, if_exists='append')
@@ -247,17 +248,16 @@ class dataHub:
             df = concat([df, hist_game_schedule], ignore_index=True)
             sleep(1)
 
-        df['season'] = df['slug_season']
         df['GAME_ID'] = df['GAME_ID'].astype(float)
         df = df.groupby(['GAME_ID']).head(1)
         df['GAME_DATE'] = [parse(el).date() for el in df['GAME_DATE']]
-        df['slug_matchup'] = df['MATCHUP']
         df['opponent'] = df['MATCHUP'].str.replace(r'[ @ | vs. ]', '', regex=True)
         df['opponent'] = df.apply(lambda x: x['opponent'].replace(x['TEAM_ABBREVIATION'], ''), axis=1)
-        df['slug_team_winner'] = where(df['WL'] == 'W', df['TEAM_ABBREVIATION'], df['opponent'])
-        df['slug_team_loser'] = where(df['WL'] == 'L', df['TEAM_ABBREVIATION'], df['opponent'])
-        df['slug_season'] = Season.previous_season
+        df['team_winner'] = where(df['WL'] == 'W', df['TEAM_ABBREVIATION'], df['opponent'])
+        df['team_loser'] = where(df['WL'] == 'L', df['TEAM_ABBREVIATION'], df['opponent'])
+        df['season'] = Season.previous_season
         df = df.rename(snakecase.convert, axis='columns')
+        df = df.rename(columns = {'type_season': 'season_type'})
         df = df[col_order]
         
         df_t = read_sql(f"SELECT * FROM nba.league_game_schedule WHERE season != '{Season.previous_season}'", db_con)
@@ -298,9 +298,9 @@ class dataHub:
         # Cast date columns to_date & Create new columns
         df['game_date'] = [parse(el).date() for el in df['game_date']]
         df['season'] = Season.current_season
-        df['slug_matchup'] = df['home_team_slug'] + ' vs. ' + df['away_team_slug']
-        df['slug_team_winner'] = None
-        df['slug_team_loser'] = None
+        df['matchup'] = df['home_team_slug'] + ' vs. ' + df['away_team_slug']
+        df['team_winner'] = None
+        df['team_loser'] = None
 
         # potentially remove this from process
         key_dates = read_sql('SELECT * FROM util.key_dates', db_con)
@@ -348,11 +348,11 @@ class dataHub:
         df['WEIGHT_KG'] = [round(float(el) / 2.2046, 3) if el is not None else None for el in df['WEIGHT']]
         df['NUM'] = [None if (el is None or el == '') else el for el in df['NUM']]
         df = df.rename(snakecase.convert, axis='columns')
-        df['slug_season'] = Season.current_season
+        df['season'] = Season.current_season
         df = df[col_order]
 
         # CONTROL FOR PLAYERS BEING TRADED
-        df_t = read_sql('SELECT * FROM nba.team_roster WHERE season = {}'.format(Season.current_season_year), db_con)
+        df_t = read_sql(f"SELECT * FROM nba.team_roster WHERE season = '{Season.current_season}'", db_con)
         df = concat([df, df_t])
         df = df[~df.duplicated(keep = False)].reset_index(drop=True)
         
