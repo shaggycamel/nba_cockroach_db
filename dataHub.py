@@ -458,8 +458,12 @@ class dataHub:
             elif con.startswith('Yahoo'):
                 df = self._yahoo_get_free_agents(fty_con[con])
 
+            # Delete from database
+            db_ex = db_con.connect()
+            db_ex.execute(text(f"DELETE FROM fty.free_agents WHERE season = '{Season.current_season}' AND platform = '{con.split(';')[0]}' AND league_id = {con.split(';')[1]}"))
+            db_ex.commit()
+
             # Write to database
-            db_con.connect().execute(text(f"DELETE FROM fty.free_agents WHERE season = '{Season.current_season}' AND platform = '{con.split(';')[0]}' AND league_id = {con.split(';')[1]}"))
             df.to_sql('free_agents', db_con, schema='fty', index=False, if_exists='append')
             print(con + ' fty.free_agents has been updated\n\n')
 
