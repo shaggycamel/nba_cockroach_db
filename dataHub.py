@@ -208,6 +208,7 @@ class dataHub:
                     bst
                     .get_data_frames()[el]
                     .rename(snakecase.convert, axis='columns')
+                    .rename(columns={'to': 'tov'}) # conform with col_order
                     .drop_duplicates()
                     .assign(game_id = lambda x: x['game_id'].astype('int'))
                     .assign(min = lambda x: [int(re.sub(r'\..*', '', el)) if el is not None else None for el in x['min']])
