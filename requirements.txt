@@ -10,7 +10,7 @@ pandasql == 0.7.3
 pro-sports-transactions == 1.0.0
 psycopg2-binary == 2.9.6
 pytz == 2023.3
-requests == 2.31.0
+requests == 2.32.3
 snakecase == 1.0.1
 sqlalchemy == 2.0.19
 yfpy == 16.0.3
