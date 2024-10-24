@@ -7,8 +7,8 @@ from sqlalchemy.dialects.postgresql.base import PGDialect; PGDialect._get_server
 from dataHub import dataHub
 
 dh = dataHub()
-db_con = dh.db_connect('postgre')
-# db_con = dh.db_connect('cockroach')
+# db_con = dh.db_connect('postgre')
+db_con = dh.db_connect('cockroach')
 fty_con = dh.fty_con(db_con)
 
 print('\nWriting to database:', 'cockroach' if 'cockroach' in str(db_con.url) else 'postgre', '\n\n')
@@ -33,7 +33,7 @@ def custom_prelog(eval_string, table_name, batch_attempt):
 
 ################################### Log start of process
 nz_date = datetime.now(timezone('NZ')).strftime('%Y-%m-%d')
-batch_attempt = read_sql_query("SELECT MAX(batch_attempt) FROM util.update_log WHERE process_date::DATE = '{}'".format(nz_date), db_con)['max']
+batch_attempt = read_sql_query(f"SELECT MAX(batch_attempt) FROM util.update_log WHERE process_date::DATE = '{nz_date}'", db_con)['max']
 batch_attempt = 1 if batch_attempt[0] is None else batch_attempt[0] + 1
 
 DataFrame(
