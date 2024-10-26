@@ -663,7 +663,7 @@ class dataHub:
                     'player_acquisition_type': None
                 })
         
-        return DataFrame(df)
+        return DataFrame(df)['player_injury_status'].replace('', None)
 
     
 

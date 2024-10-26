@@ -11,7 +11,7 @@
 - [x] Update requirements.txt
 - [x] update software on raspberry-pi
 - [x] pull latest code to raspberry-pi
-- [x] update raspberry-pi latest packages venv doc
+- [x] update raspberry-pi requirements packages venv
 - [ ] edit raspberry-pi cron job
 
 
