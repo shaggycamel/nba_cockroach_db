@@ -504,7 +504,7 @@ class dataHub:
                     'player_position': p_ownership.display_position
                 })
         
-        return DataFrame(df)['player_status'].replace('', None)
+        return DataFrame(df)['player_status'].replace('', 'ACTIVE')
 
 
     def fty_get_league_competitor(self, fty_con, db_con):
@@ -663,7 +663,7 @@ class dataHub:
                     'player_acquisition_type': None
                 })
         
-        return DataFrame(df)['player_injury_status'].replace('', None)
+        return DataFrame(df)['player_injury_status'].replace('', 'ACTIVE')
 
     
 
