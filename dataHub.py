@@ -505,7 +505,7 @@ class dataHub:
                 })
 
         df = DataFrame(df)
-        df['player_injury_status'] = ['ACTIVE' if el == '' else el for el in df['player_status']]
+        df['player_injury_status'] = ['ACTIVE' if el == '' else el for el in df['player_injury_status']]
         return df
 
 
