@@ -480,7 +480,7 @@ class dataHub:
                 'player_id': free_agent.playerId,
                 'player_name': free_agent.name,
                 'player_team': free_agent.proTeam.replace('PHL', 'PHI').replace('PHO', 'PHX'),
-                'player_status': free_agent.injuryStatus,
+                'player_injury_status': free_agent.injuryStatus,
                 'player_position': free_agent.position
             }) 
 
@@ -500,12 +500,12 @@ class dataHub:
                     'player_id': p_ownership.player_id,
                     'player_name': p_ownership.name.full,
                     'player_team': p_ownership.editorial_team_abbr,
-                    'player_status': player.status,
+                    'player_injury_status': player.status,
                     'player_position': p_ownership.display_position
                 })
 
         df = DataFrame(df)
-        df['player_status'] = ['ACTIVE' if el == '' else el for el in df['player_status']]
+        df['player_injury_status'] = ['ACTIVE' if el == '' else el for el in df['player_status']]
         return df
 
 
