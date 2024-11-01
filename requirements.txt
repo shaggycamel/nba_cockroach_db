@@ -1,7 +1,7 @@
 async-lru == 2.0.3
 async-timeout == 4.0.3
 datetime == 5.2
-espn-api == 0.39.0
+espn-api == 0.41.0
 nba-api == 1.6.0
 nest-asyncio == 1.5.6
 numpy == 1.25.1
