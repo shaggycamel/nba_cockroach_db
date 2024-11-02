@@ -8,7 +8,7 @@ from datetime import datetime, date, timedelta
 from dateutil.parser import parse
 from pytz import timezone
 from time import sleep
-from pandas import DataFrame, concat, read_sql, to_datetime
+from pandas import DataFrame, concat, read_sql, to_datetime, date_range
 from numpy import where
 from sqlalchemy import create_engine
 from sqlalchemy.sql import text
@@ -727,26 +727,28 @@ class dataHub:
         return df[(df._merge=='left_only')].drop('_merge', axis=1)
 
 
-    # CHECK THIS ONE CAREFULLY. IT CAN BE IMPROVED!!! 
+ 
     def fty_get_matchup_box_score(self, fty_con, db_con):
 
         for con in fty_con:
             if con.startswith('ESPN'):
                 df = self._espn_get_matchup_box_score(fty_con[con])
-            # elif con.startswith('Yahoo'):
-            #     df = self._yahoo_get_matchup_box_score(fty_con[con])
+            elif con.startswith('Yahoo'):
+                df = self._yahoo_get_matchup_box_score(fty_con[con])
 
-            # df.write_database('fty.matchup_box_score', db_con.url, if_table_exists='replace')
-            # print('has been updated')
+            # Delete from database
+            db_ex = db_con.connect()
+            db_ex.execute(text(f"DELETE FROM fty.matchup_box_score WHERE season = '{Season.current_season}' AND platform = '{con.split(';')[0]}' AND league_id = {con.split(';')[1]} AND matchup = {df['matchup'][0]}"))
+            db_ex.commit()
+            
+            # Write to database
+            df.to_sql('matchup_box_score', db_con, schema='fty', index=False, if_exists='append')
+            print(con + ' fty.matchup_box_score has been updated\n\n')
 
     def _espn_get_matchup_box_score(self, fty_con):
         
-        # NEED TO TEST IF THIS WORKS
-        # PARTICULARLY ON MONDAY MORNINGS WHERE MATCHUP PERIOD COULD BE WRONG
-
         df = [] 
-        stats = ['PTS', 'BLK', 'STL', 'AST', 'REB', 'TO', 'FGM', 'FGA', 'FTM', 'FTA', '3PTM', 'FG%', 'FT%']
-
+        stats = ['PTS', 'BLK', 'STL', 'AST', 'REB', 'TO', 'FGM', 'FGA', 'FTM', 'FTA', '3PM', 'FG%', 'FT%']
         period = fty_con.currentMatchupPeriod if date.today().strftime('%a') != 'Mon' else fty_con.currentMatchupPeriod - 1
         box_score = fty_con.box_scores(matchup_period = period)
         
@@ -755,39 +757,90 @@ class dataHub:
                 
                 competitor = getattr(matchup, h_a + '_team')
                 competitor_stats = getattr(matchup, h_a + '_stats')
-    
-                df.append(
-                    DataFrame({
-                        ** {
-                            'season': fty_con.year,
-                            'platform': 'ESPN',
-                            'league_id': fty_con.league_id,
-                            'competitor_id': competitor.team_id,
-                            'matchup': period
-                        } ,
-                        ** dict(zip(stats, [competitor_stats[stat]['value'] for stat in stats]))
-                    })
-                )
-
-        df = concat(df)
-        df = df.rename(snakecase.convert, axis='columns')
-        df = df.rename({'3ptm': 'fg3_m', 'fg%': 'fg_pct', 'ft%': 'ft_pct', 'to': 'tov'})
-    
-        # CONCAT WITH QUERY THAT EXCLUDES MATCHUP PERIOD
-        return concat([
-            read_sql(
-                """
-                SELECT * 
-                FROM fty.matchup_box_score 
-                WHERE NOT (season = {} AND league_id = {} AND matchup = {})
-                """.format(fty_con.year, fty_con.league_id, period),
-                db_con
-            ), 
-            df
-        ])
-
-    # def _yahoo_get_matchup_box_score(self, fty_con):
         
+                df.append({
+                    ** {
+                        'season': Season.current_season,
+                        'platform': 'ESPN',
+                        'league_id': fty_con.league_id,
+                        'competitor_id': competitor.team_id,
+                        'matchup': period
+                    } ,
+                    ** dict(zip(stats, [competitor_stats[stat]['value'] for stat in stats]))
+                })
+        
+        return (
+            DataFrame(df)
+            .rename(snakecase.convert, axis='columns')
+            .rename({'3ptm': 'fg3_m', 'fg%': 'fg_pct', 'ft%': 'ft_pct', 'to': 'tov'})  
+        )
+
+
+    def _yahoo_get_matchup_box_score(self, fty_con):
+
+        dt = datetime.now(timezone('EST')).date()
+
+        qry = f"""
+        SELECT 
+        	ls.season,
+        	ls.platform,
+        	ls.league_id,
+        	ls.week AS matchup,
+        	id.yahoo_id,
+            gs.game_date,
+            gs.game_id,
+        	bs.pts,
+        	bs.blk,
+        	bs.stl,
+        	bs.ast,
+        	bs.reb,
+        	bs.tov,
+        	bs.fgm,
+        	bs.fga,
+        	bs.ftm,
+        	bs.fta,
+        	bs.fg3_m
+        FROM nba.player_box_score AS bs
+        LEFT JOIN nba.league_game_Schedule AS gs ON bs.game_id = gs.game_id
+        LEFT JOIN util.nba_fty_name_match AS id ON bs.player_id = id.nba_id
+        INNER JOIN (
+        	SELECT DISTINCT
+        		season,
+        		platform,
+        		league_id,
+        		week,
+        		week_start,
+        		week_end
+        	FROM fty.league_schedule
+        	WHERE platform = 'Yahoo'
+        		AND season = '{Season.current_season}'
+        		AND league_id = {fty_con.league_id}
+                AND '{dt}' BETWEEN week_start AND week_end
+        ) AS ls ON gs.game_date BETWEEN ls.week_start AND ls.week_end
+        """
+        
+        box_scores = read_sql(qry, db_con)
+        box_scores['game_date'] = to_datetime(box_scores['game_date'])
+
+        
+        df = []
+        for competitor in fty_con.get_league_teams():
+            for dt in date_range(box_scores['game_date'].min(), box_scores['game_date'].max()):
+                for player in fty_con.get_team_roster_player_info_by_date(competitor.team_id, dt):
+                    if player.selected_position.position not in ['IL+', 'BN']:
+                        df.append({'competitor_id': competitor.team_id, 'game_date': dt, 'yahoo_id': player.player_id})    
+        
+        return (
+            DataFrame(df)
+            .merge(box_scores, on=['yahoo_id', 'game_date'], how='inner')
+            .drop(['yahoo_id', 'game_date', 'game_id'], axis='columns')
+            .groupby(by=['season', 'platform', 'league_id', 'competitor_id', 'matchup'], as_index=False)
+            .sum()
+            .assign(
+                fg_pct = lambda x: x['fgm'] / x['fga'],
+                ft_pct = lambda x: x['ftm'] / x['fta']
+            )
+        )
 
     
     
