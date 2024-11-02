@@ -10,9 +10,9 @@
 - [x] Transport all working postgres tables to cockroach
 - [x] Update requirements.txt
 - [x] update software on raspberry-pi
-- [x] pull latest code to raspberry-pi
+- [ ] pull latest code to raspberry-pi
 - [x] update raspberry-pi requirements packages venv
-- [ ] edit raspberry-pi cron job
+- [x] edit raspberry-pi cron job
 
 
 ## TO DO:
