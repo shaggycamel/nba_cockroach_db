@@ -748,14 +748,14 @@ class dataHub:
     def _espn_get_matchup_box_score(self, fty_con):
         
         dt = datetime.now(timezone('EST')).date()
-        period = read_sql(f"
+        period = read_sql(f"""
             SELECT DISTINCT week 
             FROM fty.league_schedule 
         	WHERE platform = 'ESPN'
         		AND season = '{Season.current_season}'
         		AND league_id = {fty_con.league_id}
                 AND '{dt}' BETWEEN week_start AND week_end
-        ", db_con)['week'][0]
+        """, db_con)['week'][0]
         box_score = fty_con.box_scores(matchup_period = period)
 
         df = [] 
