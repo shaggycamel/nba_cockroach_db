@@ -731,10 +731,11 @@ class dataHub:
     def fty_get_matchup_box_score(self, fty_con, db_con):
 
         for con in fty_con:
+            print('\n--------------------- ' + con + ' fty.matchup_box_score')
             if con.startswith('ESPN'):
-                df = self._espn_get_matchup_box_score(fty_con[con])
+                df = self._espn_get_matchup_box_score(fty_con[con], db_con)
             elif con.startswith('Yahoo'):
-                df = self._yahoo_get_matchup_box_score(fty_con[con])
+                df = self._yahoo_get_matchup_box_score(fty_con[con], db_con)
 
             # Delete from database
             db_ex = db_con.connect()
@@ -745,7 +746,7 @@ class dataHub:
             df.to_sql('matchup_box_score', db_con, schema='fty', index=False, if_exists='append')
             print(con + ' fty.matchup_box_score has been updated\n\n')
 
-    def _espn_get_matchup_box_score(self, fty_con):
+    def _espn_get_matchup_box_score(self, fty_con, db_con):
         
         dt = datetime.now(timezone('EST')).date()
         period = read_sql(f"""
@@ -756,6 +757,7 @@ class dataHub:
         		AND league_id = {fty_con.league_id}
                 AND '{dt}' BETWEEN week_start AND week_end
         """, db_con)['week'][0]
+        # period = 3 # Manual intervention
         box_score = fty_con.box_scores(matchup_period = period)
 
         df = [] 
@@ -779,52 +781,53 @@ class dataHub:
         
         return (
             DataFrame(df)
-            .rename(snakecase.convert, axis='columns')
-            .rename({'3ptm': 'fg3_m', 'fg%': 'fg_pct', 'ft%': 'ft_pct', 'to': 'tov'})  
+            .rename({'3PM': 'fg3_m', 'FG%': 'fg_pct', 'FT%': 'ft_pct', 'TO': 'tov'}, axis='columns') 
+            .rename(snakecase.convert, axis='columns') 
         )
 
 
-    def _yahoo_get_matchup_box_score(self, fty_con):
+    def _yahoo_get_matchup_box_score(self, fty_con, db_con):
 
         dt = datetime.now(timezone('EST')).date()
-
+        # dt = '2024-11-10' # manual intervention: set to date of last day in week
+        
         qry = f"""
-        SELECT 
-        	ls.season,
-        	ls.platform,
-        	ls.league_id,
-        	ls.week AS matchup,
-        	id.yahoo_id,
-            gs.game_date,
-            gs.game_id,
-        	bs.pts,
-        	bs.blk,
-        	bs.stl,
-        	bs.ast,
-        	bs.reb,
-        	bs.tov,
-        	bs.fgm,
-        	bs.fga,
-        	bs.ftm,
-        	bs.fta,
-        	bs.fg3_m
-        FROM nba.player_box_score AS bs
-        LEFT JOIN nba.league_game_Schedule AS gs ON bs.game_id = gs.game_id
-        LEFT JOIN util.nba_fty_name_match AS id ON bs.player_id = id.nba_id
-        INNER JOIN (
-        	SELECT DISTINCT
-        		season,
-        		platform,
-        		league_id,
-        		week,
-        		week_start,
-        		week_end
-        	FROM fty.league_schedule
-        	WHERE platform = 'Yahoo'
-        		AND season = '{Season.current_season}'
-        		AND league_id = {fty_con.league_id}
-                AND '{dt}' BETWEEN week_start AND week_end
-        ) AS ls ON gs.game_date BETWEEN ls.week_start AND ls.week_end
+            SELECT 
+            	ls.season,
+            	ls.platform,
+            	ls.league_id,
+            	ls.week AS matchup,
+            	id.yahoo_id,
+                gs.game_date,
+                gs.game_id,
+            	bs.pts,
+            	bs.blk,
+            	bs.stl,
+            	bs.ast,
+            	bs.reb,
+            	bs.tov,
+            	bs.fgm,
+            	bs.fga,
+            	bs.ftm,
+            	bs.fta,
+            	bs.fg3_m
+            FROM nba.player_box_score AS bs
+            LEFT JOIN nba.league_game_Schedule AS gs ON bs.game_id = gs.game_id
+            LEFT JOIN util.nba_fty_name_match AS id ON bs.player_id = id.nba_id
+            INNER JOIN (
+            	SELECT DISTINCT
+            		season,
+            		platform,
+            		league_id,
+            		week,
+            		week_start,
+            		week_end
+            	FROM fty.league_schedule
+            	WHERE platform = 'Yahoo'
+            		AND season = '{Season.current_season}'
+            		AND league_id = {fty_con.league_id}
+                    AND '{dt}' BETWEEN week_start AND week_end
+            ) AS ls ON gs.game_date BETWEEN ls.week_start AND ls.week_end
         """
         
         box_scores = read_sql(qry, db_con)
