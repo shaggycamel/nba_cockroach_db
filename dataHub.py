@@ -651,19 +651,20 @@ class dataHub:
         df = []
         for team_id in [team.team_id for team in fty_con.get_league_teams()]:
             for player in fty_con.get_team_roster_by_week(team_id).clean_data_dict()['players']:
-                df.append({
-                    'season': Season.current_season,
-                    'platform': 'Yahoo',
-                    'league_id': fty_con.league_id,
-                    'timestamp': datetime.now(timezone('NZ')),
-                    'league_week': fty_con.get_league_info().current_week,
-                    'competitor_id': team_id,
-                    'player_fantasy_id': player['player'].player_id,
-                    'player_name': player['player'].name.full,
-                    'player_team': player['player'].editorial_team_abbr,
-                    'player_injury_status': player['player'].status,
-                    'player_acquisition_type': None
-                })
+                if player['player'].selected_position.position != None:
+                    df.append({
+                        'season': Season.current_season,
+                        'platform': 'Yahoo',
+                        'league_id': fty_con.league_id,
+                        'timestamp': datetime.now(timezone('NZ')),
+                        'league_week': fty_con.get_league_info().current_week,
+                        'competitor_id': team_id,
+                        'player_fantasy_id': player['player'].player_id,
+                        'player_name': player['player'].name.full,
+                        'player_team': player['player'].editorial_team_abbr,
+                        'player_injury_status': player['player'].status,
+                        'player_acquisition_type': None
+                    })
 
         df = DataFrame(df)
         df['player_injury_status'] = ['ACTIVE' if el == '' else el for el in df['player_injury_status']]
