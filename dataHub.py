@@ -125,7 +125,7 @@ class dataHub:
         col_order = read_sql("SELECT column_name FROM util.table_column_order WHERE table_name = 'player_game_log' ORDER BY column_order", db_con)['column_name'].to_list()
         date_from = (read_sql('SELECT MAX(game_date) FROM nba.player_game_log', db_con)['max'][0] + timedelta(days=1)).strftime('%m/%d/%Y')
         date_to = datetime.now(timezone('US/Eastern')).date().strftime('%m/%d/%Y')
-        season_types = read_sql("SELECT * FROM util.key_dates WHERE begin_date <= '{}' AND end_date >= '{}'".format(date_from, date_to), db_con)['season_type'].to_list()
+        season_types = read_sql("SELECT * FROM nba.key_dates WHERE begin_date <= '{}' AND end_date >= '{}'".format(date_from, date_to), db_con)['season_type'].to_list()
         if 'All Star' in season_types: 
             season_types = ['All Star']
 
@@ -304,7 +304,7 @@ class dataHub:
         df['team_loser'] = None
 
         # potentially remove this from process
-        key_dates = read_sql('SELECT * FROM util.key_dates', db_con)
+        key_dates = read_sql('SELECT * FROM nba.key_dates', db_con)
         df = (
             sqldf("""
                 SELECT key_dates.season_type, df.*
@@ -572,7 +572,7 @@ class dataHub:
 
     def _espn_get_league_schedule(self, fty_con, db_con):
 
-        league_start_date = read_sql(f"SELECT begin_date FROM util.key_dates WHERE season = '{Season.current_season}' AND season_type = 'Regular Season'", db_con)['begin_date'][0]
+        league_start_date = read_sql(f"SELECT begin_date FROM nba.key_dates WHERE season = '{Season.current_season}' AND season_type = 'Regular Season'", db_con)['begin_date'][0]
         league_start_date = league_start_date + timedelta(days = -league_start_date.weekday())
 
         df = []
