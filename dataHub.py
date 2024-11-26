@@ -747,6 +747,7 @@ class dataHub:
             df.to_sql('matchup_box_score', db_con, schema='fty', index=False, if_exists='append')
             print(con + ' fty.matchup_box_score has been updated\n\n')
 
+
     def _espn_get_matchup_box_score(self, fty_con, db_con):
         
         dt = datetime.now(timezone('EST')).date()
@@ -789,7 +790,7 @@ class dataHub:
 
     def _yahoo_get_matchup_box_score(self, fty_con, db_con):
 
-        dt = datetime.now(timezone('EST')).date()
+        dt = datetime.now(timezone('EST')).date() - timedelta(days=1)
         # dt = '2024-11-10' # manual intervention: set to date of last day in week
         
         qry = f"""
