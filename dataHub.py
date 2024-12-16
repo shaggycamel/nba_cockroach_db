@@ -269,7 +269,7 @@ class dataHub:
 
     
     
-    def get_next_game_schedule(self, db_con):
+    def get_next_game_schedule(self, db_con, update_db=True):
         
         col_order = read_sql("SELECT column_name FROM util.table_column_order WHERE table_name = 'league_game_schedule' ORDER BY column_order", db_con)['column_name'].to_list()
         
@@ -317,8 +317,11 @@ class dataHub:
         )
 
         # Write to database
-        df.to_sql('league_game_schedule', db_con, schema='nba', index=False, if_exists='append')
-        print('nba.current_game_schedule has been updated\n\n')
+        if update_db:
+            df.to_sql('league_game_schedule', db_con, schema='nba', index=False, if_exists='append')
+            print('nba.current_game_schedule has been updated\n\n')
+        else:
+            return df
 
 
 
