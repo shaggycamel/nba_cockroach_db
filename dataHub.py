@@ -171,7 +171,7 @@ class dataHub:
             read_sql("""
                 SELECT MAX(ls.game_date) 
                 FROM nba.team_box_score AS bs
-                LEFT JOIN nba.league_game_schedule AS ls on bs.game_id = ls.game_id
+                INNER JOIN nba.league_game_schedule AS ls on bs.game_id = ls.game_id
             """, db_con)
             ['max'][0]
             .strftime('%Y-%m-%d')
@@ -506,6 +506,7 @@ class dataHub:
                     'player_injury_status': player.status,
                     'player_position': p_ownership.display_position
                 })
+                sleep(1)
 
         df = DataFrame(df)
         df['player_injury_status'] = ['ACTIVE' if el == '' else el for el in df['player_injury_status']]
@@ -773,16 +774,17 @@ class dataHub:
                 competitor = getattr(matchup, h_a + '_team')
                 competitor_stats = getattr(matchup, h_a + '_stats')
         
-                df.append({
-                    ** {
-                        'season': Season.current_season,
-                        'platform': 'ESPN',
-                        'league_id': fty_con.league_id,
-                        'competitor_id': competitor.team_id,
-                        'matchup': period
-                    } ,
-                    ** dict(zip(stats, [competitor_stats[stat]['value'] for stat in stats]))
-                })
+                if competitor != 0:
+                    df.append({
+                        ** {
+                            'season': Season.current_season,
+                            'platform': 'ESPN',
+                            'league_id': fty_con.league_id,
+                            'competitor_id': competitor.team_id,
+                            'matchup': period
+                        } ,
+                        ** dict(zip(stats, [competitor_stats[stat]['value'] for stat in stats]))
+                    })
         
         return (
             DataFrame(df)
