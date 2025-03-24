@@ -2,17 +2,33 @@ import configparser
 import snakecase
 import re
 import warnings
+import requests
+from bs4 import BeautifulSoup
 from os import getcwd
 from requests import get
 from datetime import datetime, date, timedelta
 from dateutil.parser import parse
 from pytz import timezone
 from time import sleep
+from tabula import read_pdf
+from unicodedata import normalize
 from pandas import DataFrame, concat, read_sql, to_datetime, date_range
-from numpy import where
+from numpy import where, nan
 from sqlalchemy import create_engine
 from sqlalchemy.sql import text
 from pandasql import sqldf; pysqldf = lambda q: sqldf(q, locals())
+
+import pandas as pd
+import numpy as np
+import tabula
+import unicodedata
+from datetime import datetime, timedelta
+from sqlalchemy.sql import text
+from dataHub import dataHub
+from sqlalchemy.dialects.postgresql.base import PGDialect
+PGDialect._get_server_version_info = lambda *args: (9, 2)
+dh = dataHub()
+
 
 from nba_api.stats.endpoints import playercareerstats, commonplayerinfo, playergamelog, leaguegamelog, commonteamroster, boxscoreadvancedv2, boxscoretraditionalv2
 from nba_api.stats.static import players, teams
@@ -161,7 +177,147 @@ class dataHub:
         # Write to database
         df.to_sql('player_game_log', db_con, schema='nba', index=False, if_exists='append')
         print('nba.player_game_log has been updated to:', parse(date_to).strftime('%Y-%m-%d'), '\n\n')
+
+    # TEST IF THIS WORKS
+    def get_team_injuries(self, db_con):
+
+        # INNER FUNCTION
+        def str_search(df, str_pat, col_ix, col_name):
+            if (False in [str_pat in el for el in df.iloc[:, col_ix] if el is not nan]):
+                df.insert(loc=col_ix, column=col_name, value=nan)
+            else:
+                df.columns.values[col_ix] = col_name
+            return df
         
+        # INNER FUNCTION
+        def occ_count_search(df, df_true, col_ix, col_name):
+            df_search = pd.DataFrame({col_name: [el for el in df.iloc[:, col_ix] if el is not nan]}).value_counts().reset_index()
+            if (pd.merge(df_true, df_search, on=col_name, how='left')['count'].sum() == 0):
+               df.insert(loc=col_ix, column=col_name, value=nan)
+            else:
+                df.columns.values[col_ix] = col_name
+            return df 
+
+        
+        # REPLACE YEAR WITH SEASON VARIABLE
+        url = "https://official.nba.com/nba-injury-report-2024-25-season/" # URL from which pdfs to be downloaded
+        response = requests.get(url) # Requests URL and get response object
+        soup = BeautifulSoup(response.text, 'html.parser') # Parse text obtained
+        links = soup.find_all('a') # Find all hyperlinks present on webpage
+
+        # Get times of readings and select the latest
+        readings_time = {}; readings_pdf = {}
+        for link in links:
+            if link.decode_contents().endswith('ET report'):
+                readings_time[link.contents[0]] = parse(link.contents[0], fuzzy=True, ignoretz=True)
+                readings_pdf[link.contents[0]] = requests.get(link.get('href'))
+
+        # Write pdf file
+        pdf = open('injury.pdf', 'wb')
+        pdf.write(readings_pdf[max(readings_time, key = readings_time.get)].content)
+        pdf.close()
+
+        top = 75; left = 19; width = 804; height = 438 # Where to search on pdf file
+        dfs = read_pdf('injury.pdf', area=[top, left, top+height, left+width], pages='all') # pdf pages
+
+        # Data objects used to reconcile and complimet injury date
+        status_true = pd.DataFrame({'Current Status': ['Available', 'Probable', 'Questionable', 'Out']})
+        teams_true = pd.read_sql("SELECT CONCAT(team_long, ' ', team_name) AS team, team_slug FROM nba.teams", db_con).rename({'team': 'Team'}, axis='columns')
+        
+        cur_date = datetime.now().date() - timedelta(days=1) # TWEAK THIS AND QUERY 
+        game_ids = pd.read_sql(f"SELECT game_date, game_id, matchup FROM nba.league_game_schedule WHERE game_date BETWEEN '{cur_date}' AND '{cur_date + timedelta(days=2)}'", db_con)
+        game_ids['game_date'] = pd.to_datetime(game_ids['game_date'])
+        game_ids = pd.concat([
+            game_ids.assign(matchup = lambda x: x.matchup.str.replace(' vs. ', '@')),
+            game_ids.assign(matchup = lambda x: [el[1] + '@' + el[0] for el in x.matchup.str.split(' vs. ')])    
+        ], ignore_index=True, axis='rows')
+        
+        player_ids = pd.read_sql("SELECT nba_name, nba_id FROM util.nba_fty_name_match", db_con)
+        player_ids['nba_name'] = [normalize('NFKD', el).encode('ascii', 'ignore').decode('utf-8') for el in player_ids['nba_name']] 
+        
+        col_order = pd.read_sql("SELECT column_name FROM util.table_column_order WHERE table_name = 'injuries' ORDER BY column_order", db_con)['column_name'].to_list()
+    
+        # Loop over pdf files, where the magic happens    
+        for ix, df in enumerate(dfs):
+        
+            if ix > 0:
+        
+                # Move column names to row, excluding first df
+                colnames_temp = ['Unnamed: ' + str(el) for el in list(range(0, len(df.columns)))]
+                df = (pd.concat([
+                    pd.DataFrame({key : nan if 'Unnamed' in val else val for key, val in dict(zip(colnames_temp, df.columns)).items()}, index=[0]),
+                    df.set_axis(colnames_temp, axis=1)
+                ]))
+        
+                # Column checks
+                df = str_search(df, '/', 0, 'Game Date') # first col date search
+                df = str_search(df, ':', 1, 'Game Time') # second col time search
+                df = str_search(df, '@', 2, 'Matchup') # third col matchup search
+                df = occ_count_search(df, teams_true, 3, 'Team') # fourth col test for team
+                df = str_search(df, ',', 4, 'Player Name') # fifth col test for player name
+                df = occ_count_search(df, status_true, 5, 'Current Status') # sixth col test for status
+                df.columns.values[6] = 'Reason' # straigt rename of seventh column
+                
+            # assign back to index in list
+            dfs[ix] = df
+        
+        # Merge all and clean
+        df = pd.concat(dfs).reset_index(drop=True)
+        df['Game Date'] = df['Game Date'].ffill().bfill()
+        df['Game Time'] = df['Game Time'].ffill().bfill()
+        df['Matchup'] = df['Matchup'].ffill().bfill()
+        df['Team'] = df['Team'].ffill().bfill()
+        df['Reason_lead'] = df.groupby('Team')['Reason'].shift(-1)
+        
+        # Fix poorly formatted injury rows
+        inj_ix = df[(df['Reason_lead'].isna()) & (df['Reason'].str.startswith('Injury/Illness')) & (df['Team'] == df['Team'].shift(-1))].index
+        for ix in inj_ix:
+        
+            # Rows of interest
+            df_temp = df.iloc[range(ix, ix+3), :]
+            # print(df_temp)
+        
+            # Overwrite rows
+            df.loc[range(ix, ix+3), 'Player Name'] = [' '.join(df_temp['Player Name'].dropna())]*3
+            df.loc[range(ix, ix+3), 'Current Status'] = [' '.join(df_temp['Current Status'].dropna())]*3
+            df.loc[range(ix, ix+3), 'Reason'] = [' '.join(df_temp['Reason'].dropna())]*3
+        
+        # Drop duplicates and non-submissions & non-names (cheat...for now until better solution)
+        df = (
+            df.drop('Reason_lead', axis='columns')
+            .drop_duplicates()
+            .query('Reason != "NOT YET SUBMITTED"')
+            .query('`Player Name`.notna()')
+            .query('`Game Date`.notna()')
+        )
+        
+        # Convert columns
+        df['Game Date'] = pd.to_datetime(df['Game Date'], format='%m/%d/%Y')
+        df['Player Name'] = [el[1] + ' ' + el[0] for el in df['Player Name'].str.split(', ')]
+        
+        # Join external dataset
+        df = df.merge(teams_true, how = 'left', on='Team') # team slug
+        df = df.merge(game_ids, how = 'left', left_on=['Game Date', 'Matchup'], right_on=['game_date', 'matchup']).drop(['game_date', 'matchup'], axis=1)
+        df = df.merge(player_ids, how = 'left', left_on='Player Name', right_on='nba_name')
+        
+        # Rename cols and reorder
+        df.columns = df.columns.str.lower().str.replace(' ', '_')
+        df = df.rename(columns = {'current_status': 'status'})
+        df = df[col_order]
+        
+        # Delete old records from database
+        db_ex = db_con.connect()
+        for _, row in df.iterrows():
+            game_date = row['game_date']
+            game_id = row['game_id']
+            player_name = row['player_name'].replace("'","''") # replace to handle single quotes if they exist
+            
+            db_ex.execute(text(f"DELETE FROM nba.injuries WHERE game_date = '{game_date}' AND game_id = {game_id} AND player_name = '{player_name}'"))
+        db_ex.commit()
+        
+        # Write to database
+        df.to_sql('injuries', db_con, schema='nba', index=False, if_exists='append')
+
 
     
     # NEED TO CHECK IF WORKS
