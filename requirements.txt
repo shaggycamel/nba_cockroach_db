@@ -1,5 +1,6 @@
 async-lru == 2.0.3
 async-timeout == 4.0.3
+bs4 == 0.0.1
 datetime == 5.2
 espn-api == 0.41.0
 nba-api == 1.6.0
@@ -13,4 +14,5 @@ pytz == 2023.3
 requests == 2.32.3
 snakecase == 1.0.1
 sqlalchemy == 2.0.19
+tabula-py == 2.10.0
 yfpy == 16.0.3
