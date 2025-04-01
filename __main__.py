@@ -63,8 +63,7 @@ except IndexError as e: pass
 if 'alt_freq_objs' in locals(): 
     update_schedule = read_sql_query(f"SELECT * FROM util.update_schedule WHERE table_name IN ('{alt_freq_objs}')", db_con)
 else:
-    # update_schedule = read_sql_query(f"SELECT * FROM util.update_schedule WHERE run_period_start <= '{us_eastern_time}' AND run_period_end >= '{us_eastern_time}' AND pause IS FALSE", db_con)
-    update_schedule = read_sql_query(f"SELECT * FROM util.update_schedule WHERE pause IS FALSE ORDER BY table_name DESC", db_con)
+    update_schedule = read_sql_query("SELECT * FROM util.update_schedule WHERE pause IS FALSE ORDER BY table_name DESC", db_con)
 
 for _, row in update_schedule.iterrows():
     eval_string = ''.join(['dh.', row['associated_function'], '(', row['function_arguments'], ')'])
@@ -75,7 +74,13 @@ for _, row in update_schedule.iterrows():
 failed_objects = read_sql_query(f"SELECT table_name, error_message FROM util.update_log WHERE successful_run = 'false' AND process_date::DATE = '{nz_date}' AND batch_attempt = {batch_attempt}", db_con)
 
 DataFrame(
-    data = {'table_name': 'process end', 'process_date': datetime.now(timezone('NZ')), 'batch_attempt': batch_attempt, 'successful_run': False if len(failed_objects) > 0 else True, 'error_message': None}, 
+    data = {
+        'table_name': 'process end', 
+        'process_date': datetime.now(timezone('NZ')), 
+        'batch_attempt': batch_attempt, 
+        'successful_run': False if len(failed_objects) > 0 else True, 
+        'error_message': None
+    }, 
     index=[0]
 ).to_sql('update_log', db_con, schema='util', index=False, if_exists='append')
 
