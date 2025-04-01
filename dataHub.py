@@ -622,7 +622,7 @@ class dataHub:
                 'player_team': free_agent.proTeam.replace('PHL', 'PHI').replace('PHO', 'PHX'),
                 'player_injury_status': free_agent.injuryStatus,
                 'player_position': free_agent.position
-            }) 
+            })
 
         return DataFrame(df)
 
@@ -636,7 +636,7 @@ class dataHub:
                     'season': Season.current_season,
                     'platform': 'Yahoo',
                     'league_id': fty_con.league_id, 
-                    'timestamp': datetime.now(timezone('NZ')),
+                    # 'timestamp': datetime.now(timezone('NZ')), # insert afterwards
                     'player_id': p_ownership.player_id,
                     'player_name': p_ownership.name.full,
                     'player_team': p_ownership.editorial_team_abbr,
@@ -647,6 +647,7 @@ class dataHub:
 
         df = DataFrame(df)
         df['player_injury_status'] = ['ACTIVE' if el == '' else el for el in df['player_injury_status']]
+        df.insert(3, 'timestamp', datetime.now(timezone('NZ')))
         return df
 
 
@@ -797,7 +798,7 @@ class dataHub:
                         'season': Season.current_season,
                         'platform': 'Yahoo',
                         'league_id': fty_con.league_id,
-                        'timestamp': datetime.now(timezone('NZ')),
+                        # 'timestamp': datetime.now(timezone('NZ')), # insert afterwards
                         'league_week': fty_con.get_league_info().current_week,
                         'competitor_id': team_id,
                         'player_fantasy_id': player['player'].player_id,
@@ -809,6 +810,7 @@ class dataHub:
 
         df = DataFrame(df)
         df['player_injury_status'] = ['ACTIVE' if el == '' else el for el in df['player_injury_status']]
+        df.insert(3, 'timestamp', datetime.now(timezone('NZ')))
         return df
 
     
@@ -858,12 +860,13 @@ class dataHub:
                         'season': Season.current_season,
                         'platform': 'Yahoo',
                         'league_id': fty_con.league_id,
-                        'timestamp': datetime.fromtimestamp(activity.timestamp),
+                        'timestamp': datetime.fromtimestamp(activity.timestamp), 
                         'competitor_id': int(player.clean_data_dict()['transaction_data'][el_id].replace('454.l.121793.t.', '')),
                         'action': player.clean_data_dict()['transaction_data']['type'],
                         'player': player.clean_data_dict()['name']['full']
                     })
-                    
+
+        
         df_t = read_sql(f"SELECT * FROM fty.recent_activity WHERE season = '{Season.current_season}' AND platform = 'Yahoo' AND league_id = {fty_con.league_id}", db_con)
         df = DataFrame(df).merge(df_t, how='outer', indicator=True)
         return df[(df._merge=='left_only')].drop('_merge', axis=1)
