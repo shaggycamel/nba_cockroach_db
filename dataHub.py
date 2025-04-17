@@ -2,11 +2,10 @@ import configparser
 import snakecase
 import re
 import warnings
-import requests
 import asyncio
 import nest_asyncio; nest_asyncio.apply() # needed for running code in jupyter
 import espn_api.basketball as bb
-import pro_sports_transactions as pst
+# import pro_sports_transactions as pst # 
 from bs4 import BeautifulSoup
 from os import getcwd
 from requests import get
@@ -183,7 +182,7 @@ class dataHub:
             return df 
 
         url = f"https://official.nba.com/nba-injury-report-{Season.current_season}-season/" # URL from which pdfs to be downloaded
-        response = requests.get(url) # Requests URL and get response object
+        response = get(url) # Requests URL and get response object
         soup = BeautifulSoup(response.text, 'html.parser') # Parse text obtained
         links = soup.find_all('a') # Find all hyperlinks present on webpage
 
@@ -192,7 +191,7 @@ class dataHub:
         for link in links:
             if link.decode_contents().endswith('ET report'):
                 readings_time[link.contents[0]] = parse(link.contents[0], fuzzy=True, ignoretz=True)
-                readings_pdf[link.contents[0]] = requests.get(link.get('href'))
+                readings_pdf[link.contents[0]] = get(link.get('href'))
 
         # Write pdf file
         pdf = open('injury.pdf', 'wb')
