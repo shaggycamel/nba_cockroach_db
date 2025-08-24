@@ -482,19 +482,18 @@ class dataHub:
             on=['TeamID'],
             how = 'left'
         )
-        df['HEIGHT'] = [None if (el is None or el == '') else el for el in df['HEIGHT']]
-        df['WEIGHT'] = [None if (el is None or el == '') else el for el in df['WEIGHT']]
-        df['HEIGHT_CM'] = [round((float(el[0]) * 12 + float(el[1])) * 2.54, 2) if el is not None else None for el in df['HEIGHT'].str.split('-')]
-        df['WEIGHT_KG'] = [round(float(el) / 2.2046, 3) if el is not None else None for el in df['WEIGHT']]
         df['NUM'] = [None if (el is None or el == '') else el for el in df['NUM']]
         df = df.rename(snakecase.convert, axis='columns')
         df['season'] = Season.current_season
+        df['salary'] = None; df['salary'] = df['salary'].astype(float)
+        df['movement_date'] = None; df['movement_date'] = to_datetime(df['movement_date'])
         df = df[col_order]
 
         # CONTROL FOR PLAYERS BEING TRADED
-        df_t = read_sql(f"SELECT * FROM nba.team_roster WHERE season = '{Season.current_season}'", db_con)
-        df = concat([df, df_t])
-        df = df[~df.duplicated(keep = False)].reset_index(drop=True)
+        # df_t = read_sql(f"SELECT * FROM nba.team_roster WHERE season = '{Season.current_season}'", db_con)
+        # df_t = df_t.drop('salary', axis='columns')
+        # df = concat([df, df_t])
+        # df = df[~df.duplicated(keep = False)].reset_index(drop=True)
         
         # Write to database
         df.to_sql('team_roster', db_con, schema='nba', index=False, if_exists='append')
