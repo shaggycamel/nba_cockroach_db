@@ -43,7 +43,8 @@ class dataHub:
         parser.read(getcwd() + '/database.ini')
         db_creds = dict(parser.items(platform))
         sql_url = 'dialect://user:password@host:port/database'
-        for el in db_creds: sql_url = sql_url.replace(el, db_creds[el])
+        for el in db_creds: 
+            sql_url = sql_url.replace(el, db_creds[el])
 
         return create_engine(sql_url, connect_args={'connect_timeout': 5 * 60}) # 5 minute timeout
         
@@ -373,13 +374,18 @@ class dataHub:
         
 
     
-    def update_past_game_schedule(self, db_con):
+    def update_past_game_schedule(self, db_con, season='current'):
         col_order = read_sql("SELECT column_name FROM util.table_column_order WHERE table_name = 'league_game_schedule' ORDER BY column_order", db_con)['column_name'].to_list()
         
+        if season == 'current':
+            season = Season.current_season_year
+        else:
+            season = Season.previous_season_year
+
         print('\n--------------------- nba.historical_league_game_schedule')
         df = DataFrame() 
         for type_season in ['Regular Season', 'Pre Season', 'Playoffs', 'All Star']:
-            hist_game_schedule = leaguegamelog.LeagueGameLog(season_type_all_star=type_season, season=Season.current_season_year-1)
+            hist_game_schedule = leaguegamelog.LeagueGameLog(season_type_all_star=type_season, season=(season-1))
             hist_game_schedule = hist_game_schedule.get_data_frames()[0]
             hist_game_schedule['type_season'] = type_season
             df = concat([df, hist_game_schedule], ignore_index=True)
@@ -392,55 +398,39 @@ class dataHub:
         df['opponent'] = df.apply(lambda x: x['opponent'].replace(x['TEAM_ABBREVIATION'], ''), axis=1)
         df['team_winner'] = where(df['WL'] == 'W', df['TEAM_ABBREVIATION'], df['opponent'])
         df['team_loser'] = where(df['WL'] == 'L', df['TEAM_ABBREVIATION'], df['opponent'])
-        df['season'] = Season.previous_season
+        df['season'] = f"{season}-{str(season+1)[-2:]}"
         df = df.rename(snakecase.convert, axis='columns')
         df = df.rename(columns = {'type_season': 'season_type'})
         df = df[col_order]
-        
-        df_t = read_sql(f"SELECT * FROM nba.league_game_schedule WHERE season != '{Season.previous_season}'", db_con)
-        df = concat([df_t, df], ignore_index=True).drop_duplicates()
-        df.to_sql('league_game_schedule', db_con, schema='nba', index=False, if_exists='replace')
+
+        db_ex = db_con.connect()
+        db_ex.execute(text(f"DELETE FROM nba.league_game_schedule WHERE season = '{season}-{str(season+1)[-2:]}'"))
+        db_ex.commit()
+
+        df.to_sql('league_game_schedule', db_con, schema='nba', index=False, if_exists='append')
         print('nba.historical_game_schedule has been updated\n\n')
 
 
     
     
     def get_next_game_schedule(self, db_con, update_db=True):
-        
+        key_dates = read_sql('SELECT * FROM nba.key_dates', db_con)
         col_order = read_sql("SELECT column_name FROM util.table_column_order WHERE table_name = 'league_game_schedule' ORDER BY column_order", db_con)['column_name'].to_list()
-        
-        # data request
-        request = get(f'https://data.nba.com/data/10s/v2015/json/mobile_teams/nba/{Season.current_season_year}/league/00_full_schedule_week_tbds.json')
-        
-        # Dataframe object to be added to
-        df = DataFrame()
-        
-        # Loop through month elements
-        for month in request.json()['lscd']:
-            df_row = DataFrame(month['mscd']['g'])[['gid', 'gdte', 'an', 'ac', 'htm', 'vtm', 'v', 'h']]
-        
-            # Obtain home and away team info
-            for col in ['h', 'v']:
-                df_col = DataFrame([[el['tid'], el['ta']] for el in df_row[col]])
-                df_col.columns = ['home_team_id', 'home_team_slug'] if col == 'h' else ['away_team_id', 'away_team_slug']
-                df_row = concat([df_row, df_col], axis = 1)
-        
-            # Rename columns
-            df_row = df_row.drop(columns=['v', 'h'])
-            df_row = df_row.rename(columns={'gid':'game_id', 'gdte':'game_date', 'an':'arena', 'ac':'city', 'htm':'home_team_time', 'vtm':'away_team_time'})
-        
-            # Collate data
-            df = concat([df, df_row], ignore_index=True)
-        
-        # Cast date columns to_date & Create new columns
-        df['game_date'] = [parse(el).date() for el in df['game_date']]
+        request = get('https://cdn.nba.com/static/json/staticData/scheduleLeagueV2_1.json')
+
+        df = []
+        for game_date in request.json()['leagueSchedule']['gameDates']:
+            for game in game_date['games']:
+                df.append({
+                    'game_id': int(game['gameId']),
+                    'game_date': parse(game_date['gameDate']).date(),
+                    'matchup': game['homeTeam']['teamTricode'] + ' vs. ' + game['awayTeam']['teamTricode']
+                })
+
+        df = DataFrame(df)
         df['season'] = Season.current_season
-        df['matchup'] = df['home_team_slug'] + ' vs. ' + df['away_team_slug']
         df['team_winner'] = None
         df['team_loser'] = None
-
-        # potentially remove this from process
-        key_dates = read_sql('SELECT * FROM nba.key_dates', db_con)
         df = (
             sqldf("""
                 SELECT key_dates.season_type, df.*
@@ -451,6 +441,21 @@ class dataHub:
             [col_order]
             .drop_duplicates()
         )
+
+        # ACTIVATE THIS LATER WHEN IN-Season tourney games and All star games are added to schedule
+        # code to take head
+        # groupby gameid, sort season type - regualr on bottom
+        # slice max
+        # df = (
+        #     df
+        #     .sort_values(['season_type'])
+        #     .groupby('game_id')
+        #     .head(1)
+        # )
+
+        db_ex = db_con.connect()
+        db_ex.execute(text(f"DELETE FROM nba.league_game_schedule WHERE season = '{Season.current_season}'"))
+        db_ex.commit()
 
         # Write to database
         if update_db:
@@ -651,16 +656,23 @@ class dataHub:
 
     def fty_get_league_competitor(self, fty_con, db_con):
 
+        # Remove existing records from database
+        db_ex = db_con.connect()
+        db_ex.execute(text(f"DELETE FROM fty.league_competitor WHERE season = '{Season.current_season}'"))
+        db_ex.commit()
+
+        dfs = []
         for con in fty_con:
             print('\n--------------------- ' + con + ' fty.league_competitor')
             if con.startswith('ESPN'):
-                df = self._espn_get_league_competitor(fty_con[con])
+                dfs.append(self._espn_get_league_competitor(fty_con[con]))
             elif con.startswith('Yahoo'):
-                df = self._yahoo_get_league_competitor(fty_con[con])
+                dfs.append(self._yahoo_get_league_competitor(fty_con[con]))
 
-            # Write to database
-            df.to_sql('league_competitor', db_con, schema='fty', index=False, if_exists='append')
-            print(con + ' fty.league_competitor has been updated\n\n')
+        # Write to database
+        df = concat(dfs, ignore_index=True)
+        df.to_sql('league_competitor', db_con, schema='fty', index=False, if_exists='append')
+        print('\nfty.league_competitor has been updated\n\n')
         
 
     def _espn_get_league_competitor(self, fty_con):
