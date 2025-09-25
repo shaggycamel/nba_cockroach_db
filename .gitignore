@@ -1,4 +1,9 @@
 
+### ignore data files
+*.csv
+*.pdf
+.DS_Store
+
 #### ignore custom files
 
 # Database config file
