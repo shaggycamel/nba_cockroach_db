@@ -4,6 +4,15 @@ from dataHub import dataHub
 
 dh = dataHub('postgre')
 
+league_cats = pd.read_sql(f"SELECT * FROM fty.league_categories WHERE platform = 'ESPN' AND season = '2024-25' AND league_id = 95537", dh.db_con)
+
+cat_labels = (
+    league_cats
+    .merge(pd.read_sql("SELECT * FROM fty.category_label WHERE platform = 'ESPN'", dh.db_con), how='left', left_on=['platform', 'category'], right_on=['platform', 'fty_category'])
+    .set_index('fty_category')['db_category']
+    .to_dict()
+)
+
 
 # Matchup period and dates ----------------------------------------------------
 
@@ -42,7 +51,7 @@ fty_matchup_dates = (
     .pivot(index='matchup_period', columns='from_to', values='date')
     .rename_axis(columns=None)
     .reset_index()
-    [['matchup_period', 'matchup_start', 'matchup_end']] 
+    .assign(season = '2024-25', platform = 'ESPN', league_id = 123)
 )
 
 # League Schedule ----------------------------------------------------
