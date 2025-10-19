@@ -33,6 +33,8 @@ class dataHub:
         # Scalars
         self.cur_season = Season.current_season
         self.cur_season_year = int(Season.current_season[0:4])
+        # self.cur_season = '2024-25'
+        # self.cur_season_year = 2024
         self.prev_season = Season.previous_season
         self.prev_season_year = int(Season.previous_season[0:4])
         self.cur_date_est = datetime.now(timezone('US/Eastern')).date()
@@ -649,7 +651,7 @@ class dataHub:
                 lg_mup.append({
                     'season': self.cur_season,
                     'platform': 'ESPN',
-                    'league_id': espn_con.leage_id,
+                    'league_id': espn_con.league_id,
                     'matchup_period': ix + 1, 
                     'competitor_id': competitor.team_id, 
                     'opponent_id': opponent.home_team.team_id if competitor.team_id == opponent.away_team.team_id else opponent.away_team.team_id
@@ -663,6 +665,9 @@ class dataHub:
 
     # NEW: TEST
     def fty_get_league_matchup_dates(self):
+
+        # THIS DOESN'T WORK FOR FUTURE DATES
+        # RESORT TO MANUAL DEFINITION IN DaTABSE FOR NOW
 
         # Remove existing records from database (if any)
         db_ex = self.db_con.connect()
@@ -679,7 +684,7 @@ class dataHub:
 
         # Write to database
         concat(dfs, ignore_index=True).to_sql('league_matchup_dates', self.db_con, schema='fty', index=False, if_exists='append')
-        print(con + ' fty.league_matchup_dates has been updated\n\n')
+        print('fty.league_matchup_dates has been updated\n\n')
 
     def _espn_get_league_matchup_dates(self, espn_con):
 
@@ -699,10 +704,13 @@ class dataHub:
         )
 
         espn_matchup_dates = espn_con.matchup_ids
+        print("one")
+        print(espn_matchup_dates)
         espn_matchup_dates = DataFrame([(int(mp), int(md)) for mp, days in espn_matchup_dates.items() for md in days], columns=['matchup_period', 'match_day'])
         espn_matchup_dates = espn_matchup_dates[espn_matchup_dates['match_day'].isin(espn_matchup_dates.groupby('matchup_period')['match_day'].agg(['min','max']).stack())]
         espn_matchup_dates = espn_matchup_dates.sort_values(['matchup_period', 'match_day'])
         espn_matchup_dates = espn_matchup_dates.merge(nba_match_dates, on = 'match_day', how = 'left')
+
 
         grp_min = espn_matchup_dates.groupby('matchup_period')['match_day'].transform('min')
         grp_max = espn_matchup_dates.groupby('matchup_period')['match_day'].transform('max')
