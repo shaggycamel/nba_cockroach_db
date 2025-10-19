@@ -78,7 +78,7 @@ class dataHub:
         print('player:', ix, '/', len(ls_pl))
 
         # Clean up for ingestion into database
-        df = concat(dfs)
+        df = concat(dfs, ignore_index=True)
         df = df.rename(snakecase.convert, axis='columns')
         df = df.rename(columns = {'season_id': 'season'})
         df = df[df['season'] == self.cur_season]
@@ -109,7 +109,7 @@ class dataHub:
         print('player:', ix, '/', len(ls_pl))
 
         # Clean up for ingestion into database
-        df = concat(dfs)
+        df = concat(dfs, ignore_index=True)
         df['HEIGHT'] = [None if (el is None or el == '') else el for el in df['HEIGHT']]
         df['WEIGHT'] = [None if (el is None or el == '') else el for el in df['WEIGHT']]
         df['HEIGHT_CM'] = [round((float(el[0]) * 12 + float(el[1])) * 2.54, 2) if el is not None else None for el in df['HEIGHT'].str.split('-')]
@@ -206,7 +206,7 @@ class dataHub:
             dfs[ix] = df
         
         # Merge all and clean
-        df = concat(dfs).reset_index(drop=True)
+        df = concat(dfs, ignore_index=True)
         df['Game Date'] = df['Game Date'].ffill().bfill()
         df['Game Time'] = df['Game Time'].ffill().bfill()
         df['Matchup'] = df['Matchup'].ffill().bfill()
@@ -290,7 +290,7 @@ class dataHub:
         g_ids = game_ids['game_id'] # [0:55]
         for game_id in g_ids:
             game_id = '00' + str(int(game_id))
-            print(game_id)
+            # print(game_id)
         
             dfs = []
             bsa = boxscoreadvancedv2.BoxScoreAdvancedV2(game_id=game_id)
@@ -346,14 +346,15 @@ class dataHub:
             season = self.prev_season_year
 
         print('\n--------------------- nba.historical_league_game_schedule')
-        df = DataFrame() 
+        dfs = [] 
         for type_season in ['Regular Season', 'Pre Season', 'Playoffs', 'All Star']:
-            hist_game_schedule = leaguegamelog.LeagueGameLog(season_type_all_star=type_season, season=(season-1))
+            hist_game_schedule = leaguegamelog.LeagueGameLog(season_type_all_star=type_season, season=season)
             hist_game_schedule = hist_game_schedule.get_data_frames()[0]
             hist_game_schedule['type_season'] = type_season
-            df = concat([df, hist_game_schedule], ignore_index=True)
+            dfs.append(hist_game_schedule)
             sleep(1)
 
+        df = concat(dfs, ignore_index=True)
         df['GAME_ID'] = df['GAME_ID'].astype(float)
         df = df.groupby(['GAME_ID']).head(1)
         df['GAME_DATE'] = [parse(el).date() for el in df['GAME_DATE']]
@@ -376,7 +377,7 @@ class dataHub:
 
     
     
-    def get_next_game_schedule(self, update_db=True):
+    def get_next_game_schedule(self):
         key_dates = read_sql('SELECT * FROM nba.key_dates', self.db_con)
         col_order = read_sql("SELECT column_name FROM util.table_column_order WHERE table_name = 'league_game_schedule' ORDER BY column_order", self.db_con)['column_name'].to_list()
         request = get('https://cdn.nba.com/static/json/staticData/scheduleLeagueV2_1.json')
@@ -416,16 +417,13 @@ class dataHub:
         #     .head(1)
         # )
 
-        db_ex = self.db_con.connect()
-        db_ex.execute(text(f"DELETE FROM nba.league_game_schedule WHERE season = '{self.cur_season}'"))
-        db_ex.commit()
+        # Remove games already played this season - This assumes update_past_game_schedule is run first
+        df_played_games = read_sql(f"SELECT * FROM nba.league_game_schedule WHERE season = '{self.cur_season}' AND team_winner IS NOT NULL", self.db_con)
+        df = df[~df['game_id'].isin(df_played_games['game_id'])]
 
         # Write to database
-        if update_db:
-            df.to_sql('league_game_schedule', self.db_con, schema='nba', index=False, if_exists='append')
-            print('nba.current_game_schedule has been updated\n\n')
-        else:
-            return df
+        df.to_sql('league_game_schedule', self.db_con, schema='nba', index=False, if_exists='append')
+        print('nba.current_game_schedule has been updated\n\n')
 
 
 
@@ -732,63 +730,23 @@ class dataHub:
         pass
 
 
-    # EVENTUALLY DELETE AND CHILD FUNCTIONS
-    def fty_get_league_schedule(self):
-
-        for con in self.fty_con:
-            print('\n--------------------- ' + con + ' fty.league_schedule')
-            if con.startswith('ESPN'):
-                df = self._espn_get_league_schedule(self.fty_con[con])
-            elif con.startswith('Yahoo'):
-                df = self._yahoo_get_league_schedule(self.fty_con[con])
-
-            # Write to database
-            df.to_sql('league_schedule', self.db_con, schema='fty', index=False, if_exists='append')
-            print(con + ' fty.league_schedule has been updated\n\n')
-
-    def _espn_get_league_schedule(self, espn_con):
-
-        league_start_date = read_sql(f"SELECT begin_date FROM nba.key_dates WHERE season = '{self.cur_season}' AND season_type = 'Regular Season'", self.db_con)['begin_date'][0]
-        league_start_date = league_start_date + timedelta(days = -league_start_date.weekday())
-
-        df = []
-        for competitor in espn_con.teams:
-            for ix, opponent in enumerate(competitor.schedule):
-                df.append({
-                    'season': self.cur_season, 
-                    'platform': 'ESPN',
-                    'league_id': espn_con.league_id, 
-                    'week': ix + 1, 
-                    'week_start': (league_start_date + timedelta(weeks=ix)),
-                    'week_end': (league_start_date + timedelta(weeks=ix+1) - timedelta(days=1)),
-                    'competitor_id': competitor.team_id, 
-                    'opponent_id': opponent.home_team.team_id if competitor.team_id == opponent.away_team.team_id else opponent.away_team.team_id
-                })
-                
-        return DataFrame(df)
-
-    def _yahoo_get_league_schedule(self, yahoo_con):
-        
-        df = []
-        for team_id in [team.team_id for team in yahoo_con.get_league_teams()]:
-            for match in yahoo_con.get_team_matchups(team_id):
-                df.append({
-                    'season': self.cur_season,
-                    'platform': 'Yahoo',
-                    'league_id': yahoo_con.league_id,
-                    'week': match.week,
-                    'week_start': match.week_start,
-                    'week_end': match.week_end,
-                    'competitor_id': team_id,
-                    'opponent_id': match.teams[1].team_id
-                })
-                
-        return DataFrame(df)
-
-
-    
-
     def fty_get_competitor_roster(self):
+
+        # Schedule NZT:
+            # 3am
+            # 8am - delete 3am records
+            # 11am - delete 8am records
+            # 1pm - delete 11am records
+            # 3pm - delete 1pm records
+            # 5pm - don't delete records, assign to next day
+            # 8pm - delete 5pm records, assign to next day
+            # 11pm - 'delete 8pm records, assign to next day
+        assigned_date = datetime.now(timezone('NZ')).date() if datetime.now(timezone('NZ')).hour < 17 else datetime.now(timezone('NZ')).date() + timedelta(days=1)
+
+        # Remove existing records from database (if any)
+        db_ex = self.db_con.connect()
+        db_ex.execute(text(f"DELETE FROM fty.competitor_roster WHERE assigned_date = '{assigned_date}'"))
+        db_ex.commit()
 
         dfs = []
         for con in self.fty_con:
@@ -798,8 +756,18 @@ class dataHub:
             elif con.startswith('Yahoo'):
                 dfs.append(self._yahoo_get_competitor_roster(self.fty_con[con]))
 
+        # Assigned date manipulation
+        df = concat(dfs)
+        df['assigned_date'] = assigned_date
+        df.insert(df.columns.get_loc('timestamp') + 1, 'assigned_date', df.pop('assigned_date'))
+
+        # Matchup_period manipulation: if Sunday and greater than 5pm
+        # THIS APPROACH DOESN'T HANDLE FOR 2 WEEK MATCHUPS....FIX IT LATER
+        cond = (datetime.now(timezone('NZ')).weekday() == 6) & (datetime.now(timezone('NZ')).hour >= 17)
+        df['matchup_period'] = df['matchup_period'] + int(cond)
+        
         # Write to database
-        concat(dfs, ignore_index=True).to_sql('competitor_roster', self.db_con, schema='fty', index=False, if_exists='append')
+        df.to_sql('competitor_roster', self.db_con, schema='fty', index=False, if_exists='append')
         print('fty.competitor_roster has been updated\n\n')
 
     def _espn_get_competitor_roster(self, espn_con):
