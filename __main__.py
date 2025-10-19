@@ -6,8 +6,8 @@ from smtplib import SMTP
 # from sqlalchemy.dialects.postgresql.base import PGDialect; PGDialect._get_server_version_info = lambda * args: (9, 2)
 from dataHub import dataHub
 
-dh = dataHub('postgre')
-# dh = dataHub('cockroach')
+# dh = dataHub('postgre')
+dh = dataHub('cockroach')
 
 print('\nWriting to database:', 'cockroach' if 'cockroach' in str(dh.db_con.url) else 'postgre', '\n\n')
 
