@@ -24,7 +24,13 @@ def custom_prelog(eval_string, table_name, batch_attempt):
         print('--------------------- NOT UPDATED:', table_name, '\n\n')
     finally:
         DataFrame(
-            data = {'table_name': table_name, 'process_date': datetime.now(timezone('NZ')), 'batch_attempt': batch_attempt, 'successful_run': success, 'error_message': error_message}, 
+            data = {
+                'table_name': table_name, 
+                'process_date': datetime.now(timezone('NZ')), 
+                'batch_attempt': batch_attempt, 
+                'successful_run': success, 
+                'error_message': error_message
+            }, 
             index=[0]
         ).to_sql('update_log', dh.db_con, schema='util', index=False, if_exists='append')
 
@@ -68,7 +74,6 @@ else:
 for _, row in update_schedule.iterrows():
     eval_string = ''.join(['dh.', row['associated_function'], '()'])
     custom_prelog(eval_string, row['table_name'], batch_attempt)
-    print(eval_string)
         
 
 #################################### Log end of process

@@ -846,10 +846,15 @@ class dataHub:
                     'action': action[1],
                     'player': action[2] 
                 })
-        
+
         df_t = read_sql(f"SELECT * FROM fty.recent_activity WHERE season = '{self.cur_season}' AND platform = 'ESPN' AND league_id = {espn_con.league_id}", self.db_con)
-        df = DataFrame(df).merge(df_t, how='outer', indicator=True)
-        return df[(df._merge=='left_only')].drop('_merge', axis=1)
+        return (
+            DataFrame(df)
+            .merge(df_t, how='left', indicator=True)
+            .query('_merge == "left_only"')
+            .drop('_merge', axis=1)
+        )
+        
 
     def _yahoo_get_recent_activity(self, yahoo_con):
 
