@@ -887,9 +887,9 @@ class dataHub:
         for con in self.fty_con:
             print('\n--------------------- ' + con + ' fty.matchup_box_score')
             if con.startswith('ESPN'):
-                df = self._espn_get_matchup_box_score(self.fty_con[con], self.db_con)
+                df = self._espn_get_matchup_box_score(self.fty_con[con])
             elif con.startswith('Yahoo'):
-                df = self._yahoo_get_matchup_box_score(self.fty_con[con], self.db_con)
+                df = self._yahoo_get_matchup_box_score(self.fty_con[con])
 
             # Delete from database
             db_ex = self.db_con.connect()
@@ -905,7 +905,7 @@ class dataHub:
         
         box_scores = espn_con.box_scores(matchup_period = espn_con.currentMatchupPeriod)
         league_cats = read_sql(f"SELECT * FROM fty.league_categories WHERE platform = 'ESPN' AND season = '{self.cur_season}' AND league_id = {espn_con.league_id}", self.db_con)
-        stats = league_cats['fty_categories']
+        stats = league_cats['category']
 
         df = [] 
         for matchup in box_scores:
@@ -928,12 +928,12 @@ class dataHub:
         cat_labels = (
             league_cats
             .merge(
-                read_sql("SELECT * FROM fty.category_label WHERE platform = 'ESPN'", self.db_con), 
+                read_sql("SELECT * FROM fty.category_label", self.db_con), 
                 how='left', 
-                left_on=['platform', 'category'], 
-                right_on=['platform', 'fty_category']
+                left_on='category', 
+                right_on='fty_category'
             )
-            .set_index('fty_category')['db_category']
+            .set_index('fty_category')['nba_category']
             .to_dict()
         )
         
