@@ -17,7 +17,7 @@ from numpy import where, nan
 from sqlalchemy import create_engine
 from sqlalchemy.sql import text
 from pandasql import sqldf; pysqldf = lambda q: sqldf(q, locals())
-from nba_api.stats.endpoints import playercareerstats, commonplayerinfo, playergamelog, leaguegamelog, commonteamroster, boxscoreadvancedv2, boxscoretraditionalv2
+from nba_api.stats.endpoints import playercareerstats, commonplayerinfo, playergamelog, leaguegamelog, commonteamroster, boxscoreadvancedv2, boxscoretraditionalv3 #, boxscoretraditionalv2
 from nba_api.stats.static import players, teams
 from nba_api.stats.library.parameters import Season
 from yfpy.query import YahooFantasySportsQuery
@@ -265,7 +265,7 @@ class dataHub:
     
     # NEED TO CHECK IF WORKS
     def get_box_score(self):
-
+                
         bs_max_dt = (
             read_sql("""
                 SELECT MAX(ls.game_date) 
@@ -275,7 +275,7 @@ class dataHub:
             ['max'][0]
             .strftime('%Y-%m-%d')
         )
-        
+
         game_ids = (
             read_sql(f"""
                 SELECT game_id, game_date
@@ -283,38 +283,61 @@ class dataHub:
                 WHERE game_date > '{bs_max_dt}' AND game_date <= current_date
             """, self.db_con)
         )
-        
+
         trad_adv_lst = ['player', 'team']
 
         print('\n--------------------- nba.player/team_box_score')
-        g_ids = game_ids['game_id'] # [0:55]
+        g_ids = game_ids['game_id'] #[0:3]
         for game_id in g_ids:
             game_id = '00' + str(int(game_id))
-            # print(game_id)
-        
+            print(game_id)
+
             dfs = []
             bsa = boxscoreadvancedv2.BoxScoreAdvancedV2(game_id=game_id)
             if len(bsa.get_normalized_dict()['PlayerStats']) == 0:
                 continue
-        
-            bst = boxscoretraditionalv2.BoxScoreTraditionalV2(game_id=game_id)
-            
+
+            # ideally this comes from v2, but it stopped working for some reason
+            bst = boxscoretraditionalv3.BoxScoreTraditionalV3(game_id=game_id)
+
             for el in [0, 1]:
-        
-                bst_col_order = read_sql(f"SELECT column_name FROM util.table_column_order WHERE table_name = '{trad_adv_lst[el]}_box_score_traditional' ORDER BY column_order", self.db_con)['column_name'].to_list()
+
+                # bst dict new becase v2 stopeed working
                 bsa_col_order = read_sql(f"SELECT column_name FROM util.table_column_order WHERE table_name = '{trad_adv_lst[el]}_box_score_advanced' ORDER BY column_order", self.db_con)['column_name'].to_list()
+                bst_col_order = read_sql(f"SELECT column_name FROM util.table_column_order WHERE table_name = '{trad_adv_lst[el]}_box_score_traditional' ORDER BY column_order", self.db_con)['column_name'].to_list()
+                if(el == 0):
+                    bst_rename_dict = dict(zip(['gameId', 'teamId', 'teamTricode', 'personId', 'playerName', 'position', 'comment', 'minutes', 'fieldGoalsMade', 'fieldGoalsAttempted', 'fieldGoalsPercentage', 'threePointersMade', 'threePointersAttempted', 'threePointersPercentage', 'freeThrowsMade', 'freeThrowsAttempted', 'freeThrowsPercentage', 'points', 'reboundsOffensive', 'reboundsDefensive', 'reboundsTotal', 'assists', 'steals', 'blocks', 'turnovers', 'foulsPersonal', 'plusMinusPoints'], bst_col_order))    
+                else:
+                    bst_rename_dict = dict(zip(['gameId', 'teamId', 'teamTricode', 'minutes', 'fieldGoalsMade', 'fieldGoalsAttempted', 'fieldGoalsPercentage', 'threePointersMade', 'threePointersAttempted', 'threePointersPercentage', 'freeThrowsMade', 'freeThrowsAttempted', 'freeThrowsPercentage', 'points', 'reboundsOffensive', 'reboundsDefensive', 'reboundsTotal', 'assists', 'steals', 'blocks', 'turnovers', 'foulsPersonal'], bst_col_order))    
                 
+                # New V3 operations...v2 was returning empty dfs for some reason
                 bst_df = (
-                    bst
-                    .get_data_frames()[el]
-                    .rename(snakecase.convert, axis='columns')
-                    .rename(columns={'to': 'tov'}) # conform with col_order
-                    .drop_duplicates()
-                    .assign(game_id = lambda x: x['game_id'].astype('int'))
-                    .assign(min = lambda x: [int(re.sub(r':.*', '', el)) if el is not None else None for el in x['min']])
-                    [bst_col_order]
+                    bst.get_data_frames()[el]
+                    .rename(columns=bst_rename_dict)            
+                    .assign(
+                        min = lambda x: [int(re.sub(r':.*', '', el)) if el != '' else None for el in x['min']],
+                        game_id = lambda x: x['game_id'].astype('int')
+                    )
                 )
-        
+
+                if(el == 0): 
+                    bst_df = bst_df.assign(player_name = lambda x: x['firstName'] + ' ' + x['familyName'])
+                else:
+                    bst_df = (
+                        bst_df
+                        .groupby(['game_id', 'team_id', 'team_abbreviation'], as_index=False)
+                        [['min', 'fgm', 'fga', 'fg3_m', 'fg3_a', 'ftm', 'fta', 'pts', 'oreb', 'dreb', 'reb', 'ast', 'stl', 'blk', 'tov', 'pf']]
+                        .sum()
+                        .assign(
+                            fg_pct=lambda x: x['fgm'] / x['fga'],
+                            fg3_pct=lambda x: x['fg3_m'] / x['fg3_a'],
+                            ft_pct=lambda x: x['ftm'] / x['fta'],
+                            plus_minus = None # just make none for place holder
+                        )
+                    )
+
+                bst_df = bst_df.drop_duplicates()[bst_col_order]
+
                 bsa_df = (
                     bsa
                     .get_data_frames()[el]
@@ -323,12 +346,12 @@ class dataHub:
                     .assign(game_id = lambda x: x['game_id'].astype('int'))
                     [bsa_col_order]
                 )
-                
+
                 jn_cols = list(set(bst_df.columns) & set(bsa_df.columns))
                 df = bst_df.merge(bsa_df, how='left', on=jn_cols)
                 df = df.rename(columns = {'to': 'tov'})
                 dfs.append(df)
-        
+
             dfs[0].to_sql('player_box_score', self.db_con, schema='nba', index=False, if_exists='append')
             dfs[1].to_sql('team_box_score', self.db_con, schema='nba', index=False, if_exists='append')
 
