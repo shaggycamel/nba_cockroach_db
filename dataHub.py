@@ -265,7 +265,7 @@ class dataHub:
     
     # NEED TO CHECK IF WORKS
     def get_box_score(self):
-                
+        
         bs_max_dt = (
             read_sql("""
                 SELECT MAX(ls.game_date) 
@@ -287,15 +287,17 @@ class dataHub:
         trad_adv_lst = ['player', 'team']
 
         print('\n--------------------- nba.player/team_box_score')
-        g_ids = game_ids['game_id'] #[0:3]
+        g_ids = game_ids['game_id'] # [0:3]
         for game_id in g_ids:
             game_id = '00' + str(int(game_id))
             print(game_id)
 
+            # GIVE UP ON ADVANCED STATS FOR TIME BEING...v2 and v3 giving errors
+
             dfs = []
-            bsa = boxscoreadvancedv2.BoxScoreAdvancedV2(game_id=game_id)
-            if len(bsa.get_normalized_dict()['PlayerStats']) == 0:
-                continue
+            # bsa = boxscoreadvancedv2.BoxScoreAdvancedV2(game_id=game_id)
+            # if len(bsa.get_normalized_dict()['PlayerStats']) == 0:
+            #     continue
 
             # ideally this comes from v2, but it stopped working for some reason
             bst = boxscoretraditionalv3.BoxScoreTraditionalV3(game_id=game_id)
@@ -303,7 +305,7 @@ class dataHub:
             for el in [0, 1]:
 
                 # bst dict new becase v2 stopeed working
-                bsa_col_order = read_sql(f"SELECT column_name FROM util.table_column_order WHERE table_name = '{trad_adv_lst[el]}_box_score_advanced' ORDER BY column_order", self.db_con)['column_name'].to_list()
+                # bsa_col_order = read_sql(f"SELECT column_name FROM util.table_column_order WHERE table_name = '{trad_adv_lst[el]}_box_score_advanced' ORDER BY column_order", self.db_con)['column_name'].to_list()
                 bst_col_order = read_sql(f"SELECT column_name FROM util.table_column_order WHERE table_name = '{trad_adv_lst[el]}_box_score_traditional' ORDER BY column_order", self.db_con)['column_name'].to_list()
                 if(el == 0):
                     bst_rename_dict = dict(zip(['gameId', 'teamId', 'teamTricode', 'personId', 'playerName', 'position', 'comment', 'minutes', 'fieldGoalsMade', 'fieldGoalsAttempted', 'fieldGoalsPercentage', 'threePointersMade', 'threePointersAttempted', 'threePointersPercentage', 'freeThrowsMade', 'freeThrowsAttempted', 'freeThrowsPercentage', 'points', 'reboundsOffensive', 'reboundsDefensive', 'reboundsTotal', 'assists', 'steals', 'blocks', 'turnovers', 'foulsPersonal', 'plusMinusPoints'], bst_col_order))    
@@ -338,17 +340,18 @@ class dataHub:
 
                 bst_df = bst_df.drop_duplicates()[bst_col_order]
 
-                bsa_df = (
-                    bsa
-                    .get_data_frames()[el]
-                    .rename(snakecase.convert, axis='columns')
-                    .drop_duplicates()
-                    .assign(game_id = lambda x: x['game_id'].astype('int'))
-                    [bsa_col_order]
-                )
+                # bsa_df = (
+                #     bsa
+                #     .get_data_frames()[el]
+                #     .rename(snakecase.convert, axis='columns')
+                #     .drop_duplicates()
+                #     .assign(game_id = lambda x: x['game_id'].astype('int'))
+                #     [bsa_col_order]
+                # )
 
-                jn_cols = list(set(bst_df.columns) & set(bsa_df.columns))
-                df = bst_df.merge(bsa_df, how='left', on=jn_cols)
+                # jn_cols = list(set(bst_df.columns) & set(bsa_df.columns))
+                # df = bst_df.merge(bsa_df, how='left', on=jn_cols)
+                df = bst_df          # placeholder for advanced join
                 df = df.rename(columns = {'to': 'tov'})
                 dfs.append(df)
 

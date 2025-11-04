@@ -1,7 +1,7 @@
 from dataHub import dataHub
 
 # dh = dataHub('postgre')
-dh = dataHub('cockroach')
+# dh = dataHub('cockroach')
 
 
 #---------------------------------- NBA Data
@@ -24,7 +24,7 @@ dh = dataHub('cockroach')
 
 
 #----- Box Scores - DAILY
-dh.get_box_score()
+# dh.get_box_score()
 
 
 #----- Team Roster - REGULARLY - DONE 2025-26
@@ -62,5 +62,4 @@ dh.get_box_score()
 
 #----- Fantasy Transactions - DAILY
 # dh.fty_get_recent_activity()
-
 
