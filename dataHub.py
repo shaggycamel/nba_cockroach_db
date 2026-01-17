@@ -767,7 +767,7 @@ class dataHub:
             # 5pm - don't delete records, assign to next day
             # 8pm - delete 5pm records, assign to next day
             # 11pm - 'delete 8pm records, assign to next day
-        assigned_date = datetime.now(timezone('NZ')).date() if datetime.now(timezone('NZ')).hour < 17 else datetime.now(timezone('NZ')).date() + timedelta(days=1)
+        assigned_date = datetime.now(timezone('NZ')).date() if datetime.now(timezone('NZ')).hour < 17 else datetime.now(timezone('NZ')).date() # + timedelta(days=1)
 
         # Remove existing records from database (if any)
         db_ex = self.db_con.connect()
