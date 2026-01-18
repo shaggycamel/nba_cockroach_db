@@ -300,7 +300,11 @@ class dataHub:
             #     continue
 
             # ideally this comes from v2, but it stopped working for some reason
-            bst = boxscoretraditionalv3.BoxScoreTraditionalV3(game_id=game_id)
+            try:
+                bst = boxscoretraditionalv3.BoxScoreTraditionalV3(game_id=game_id)
+            except Exception as e:
+                print(game_id + ': ' + str(e))
+                continue
 
             for el in [0, 1]:
 
