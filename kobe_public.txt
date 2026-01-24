@@ -1,0 +1,13 @@
+Cockroach connection string
+postgresql://kobe_public:kobe123-69(.)(.)@nba-data-mgmt-9184.8nj.gcp-europe-west1.cockroachlabs.cloud:26257/nba?sslmode=verify-full
+
+----------------------------------------------------------------------------
+
+Cockroach certificate installation command - if requried
+
+Windows - Run in powershell
+mkdir -p $env:appdata\postgresql\; Invoke-WebRequest -Uri https://cockroachlabs.cloud/clusters/11af18b7-ef5e-41b2-b3b7-5db438b1d403/cert -OutFile $env:appdata\postgresql\root.crt
+
+Mac and Linux
+curl --create-dirs -o $HOME/.postgresql/root.crt 'https://cockroachlabs.cloud/clusters/11af18b7-ef5e-41b2-b3b7-5db438b1d403/cert'
+

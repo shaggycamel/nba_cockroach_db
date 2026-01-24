@@ -5,9 +5,10 @@ import nest_asyncio; nest_asyncio.apply() # needed for running code in jupyter
 import espn_api.basketball as bb
 from os import getcwd
 from requests import get
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
+from zoneinfo import ZoneInfo
 from dateutil.parser import parse
-from pytz import timezone
+# from pytz import timezone
 from time import sleep
 from tabula import read_pdf
 from bs4 import BeautifulSoup
@@ -37,7 +38,7 @@ class dataHub:
         # self.cur_season_year = 2024
         self.prev_season = Season.previous_season
         self.prev_season_year = int(Season.previous_season[0:4])
-        self.cur_date_est = datetime.now(timezone('US/Eastern')).date()
+        # self.cur_date_est = datetime.now(timezone('US/Eastern')).date()
         self.db_con = self._db_connect(platform)
         self.fty_con = self._fty_con()
 
@@ -559,21 +560,21 @@ class dataHub:
 
     def _espn_get_free_agents(self, espn_con):
         
-        df = []
+        dfs = []
         for free_agent in espn_con.free_agents(size=1000):
-            df.append({
+            dfs.append({
                 'season': self.cur_season,
                 'platform': 'ESPN',
                 'league_id': espn_con.league_id,
-                'timestamp': datetime.now(timezone('NZ')),
+                'timestamp': datetime.now(timezone.utc),
                 'player_id': free_agent.playerId,
                 'player_name': free_agent.name,
                 'player_team': free_agent.proTeam.replace('PHL', 'PHI').replace('PHO', 'PHX'),
-                'player_injury_status': free_agent.injuryStatus,
+                'player_injury_status': None if len(free_agent.injuryStatus) == 0 else free_agent.injuryStatus,
                 'player_position': free_agent.position
             })
 
-        return DataFrame(df)
+        return DataFrame(dfs)
 
     def _yahoo_get_free_agents(self, yahoo_con):
         
@@ -596,7 +597,7 @@ class dataHub:
 
         df = DataFrame(df)
         df['player_injury_status'] = ['ACTIVE' if el == '' else el for el in df['player_injury_status']]
-        df.insert(3, 'timestamp', datetime.now(timezone('NZ')))
+        df.insert(3, 'timestamp', datetime.now(timezone.utc))
         return df
 
 
@@ -771,7 +772,7 @@ class dataHub:
             # 5pm - don't delete records, assign to next day
             # 8pm - delete 5pm records, assign to next day
             # 11pm - 'delete 8pm records, assign to next day
-        assigned_date = datetime.now(timezone('NZ')).date() if datetime.now(timezone('NZ')).hour < 17 else datetime.now(timezone('NZ')).date() # + timedelta(days=1)
+        assigned_date = datetime.now(ZoneInfo('Pacific/Auckland')).date() - timedelta(days=1) if datetime.now(ZoneInfo('Pacific/Auckland')).hour < 17 else datetime.now(ZoneInfo('Pacific/Auckland')).date()
 
         # Remove existing records from database (if any)
         db_ex = self.db_con.connect()
@@ -793,7 +794,7 @@ class dataHub:
 
         # Matchup_period manipulation: if Sunday and greater than 5pm
         # THIS APPROACH DOESN'T HANDLE FOR 2 WEEK MATCHUPS....FIX IT LATER
-        cond = (datetime.now(timezone('NZ')).weekday() == 6) & (datetime.now(timezone('NZ')).hour >= 17)
+        cond = (datetime.now(ZoneInfo('Pacific/Auckland')).weekday() == 6) & (datetime.now(ZoneInfo('Pacific/Auckland')).hour >= 17)
         df['matchup_period'] = df['matchup_period'] + int(cond)
         
         # Write to database
@@ -802,14 +803,14 @@ class dataHub:
 
     def _espn_get_competitor_roster(self, espn_con):
 
-        df = []
+        dfs = []
         for competitor in espn_con.teams:
             for player in competitor.roster:
-                df.append({
+                dfs.append({
                     'season': self.cur_season, 
                     'platform': 'ESPN',
                     'league_id': espn_con.league_id, 
-                    'timestamp': datetime.now(timezone('NZ')), 
+                    'timestamp': datetime.now(timezone.utc), 
                     'matchup_period': espn_con.currentMatchupPeriod,
                     'competitor_id': competitor.team_id, 
                     'player_fantasy_id': player.playerId, 
@@ -819,7 +820,7 @@ class dataHub:
                     'player_acquisition_type': player.acquisitionType
                 })
 
-        return DataFrame(df)
+        return DataFrame(dfs)
 
     def _yahoo_get_competitor_roster(self, yahoo_con):
 
@@ -842,7 +843,7 @@ class dataHub:
 
         df = DataFrame(df)
         df['player_injury_status'] = ['ACTIVE' if el == '' else el for el in df['player_injury_status']]
-        df.insert(3, 'timestamp', datetime.now(timezone('NZ')))
+        # df.insert(3, 'timestamp', datetime.now(timezone('NZ')))
         return df
 
     

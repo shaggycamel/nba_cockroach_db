@@ -141,287 +141,323 @@ class dataHub:
         df.to_pandas().to_sql('player_info', self.db_con, schema='nba', index=False, if_exists='append')
         print('nba.player_info has been updated\n\n')
 
-    
 
-    # # TEST IF THIS WORKS
-    # def get_team_injuries(self):
+    def get_team_injuries(self):
 
-    #     # INNER FUNCTION
-    #     def str_search(df, str_pat, col_ix, col_name):
-    #         if (False in [str_pat in el for el in df.iloc[:, col_ix] if el is not np.nan]):
-    #             df.insert(loc=col_ix, column=col_name, value=np.nan)
-    #         else:
-    #             df.columns.values[col_ix] = col_name
-    #         return df
-        
-    #     # INNER FUNCTION
-    #     def occ_count_search(df, df_true, col_ix, col_name):
-    #         df_search = DataFrame({col_name: [el for el in df.iloc[:, col_ix] if el is not np.nan]}).value_counts().reset_index()
-    #         if (merge(df_true, df_search, on=col_name, how='left')['count'].sum() == 0):
-    #            df.insert(loc=col_ix, column=col_name, value=np.nan)
-    #         else:
-    #             df.columns.values[col_ix] = col_name
-    #         return df 
+        col_order = (
+            pl.read_database(
+                "SELECT column_name FROM util.table_column_order WHERE table_name = 'injuries' ORDER BY column_order", 
+                self.db_con
+            )
+            .get_column('column_name')
+            .to_list()
+        )
 
-    #     url = f"https://official.nba.com/nba-injury-report-{self.cur_season}-season/" # URL from which pdfs to be downloaded
-    #     response = requests.get(url) # Requests URL and get response object
-    #     soup = bs4.BeautifulSoup(response.text, 'html.parser') # Parse text obtained
-    #     links = soup.find_all('a') # Find all hyperlinks present on webpage
+        url = f"https://official.nba.com/nba-injury-report-{self.cur_season}-season/" # URL from which pdfs to be downloaded
+        response = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}) # Requests URL and get response object
+        soup = bs4.BeautifulSoup(response.text, 'html.parser') # Parse text obtained
+        links = soup.find_all('a') # Find all hyperlinks present on webpage
 
-    #     # Get times of readings and select the latest
-    #     readings_time = {}; readings_pdf = {}
-    #     for link in links:
-    #         if link.decode_contents().endswith('ET report'):
-    #             readings_time[link.contents[0]] = dateutil.parser.parse(link.contents[0], fuzzy=True, ignoretz=True)
-    #             readings_pdf[link.contents[0]] = requests.get(link.get('href'))
+        # Get times of readings and select the latest
+        readings_time = {}; readings_pdf = {}
+        for link in links:
+            if link.decode_contents().endswith('ET report'):
+                readings_time[link.contents[0]] = dateutil.parser.parse(link.contents[0], fuzzy=True, ignoretz=True)
+                readings_pdf[link.contents[0]] = requests.get(link.get('href'), headers={'User-Agent': 'Mozilla/5.0'})
 
-    #     # Write pdf file
-    #     pdf = open('injury.pdf', 'wb')
-    #     pdf.write(readings_pdf[max(readings_time, key = readings_time.get)].content)
-    #     pdf.close()
+        # Write pdf file
+        pdf = open('injury.pdf', 'wb')
+        pdf.write(readings_pdf[max(readings_time, key = readings_time.get)].content)
+        pdf.close()
 
-    #     top = 75; left = 19; width = 804; height = 438 # Where to search on pdf file
-    #     dfs = tabula.read_pdf('injury.pdf', area=[top, left, top+height, left+width], pages='all') # pdf pages
+        top = 75; left = 19; width = 804; height = 438 # Where to search on pdf file
+        dfs = tabula.read_pdf('injury.pdf', area=[top, left, top+height, left+width], pages='all') # pdf pages
+        dfs = [pl.from_pandas(el) for el in dfs]
 
-    #     # Data objects used to reconcile and complimet injury date
-    #     status_true = DataFrame({'Current Status': ['Available', 'Probable', 'Questionable', 'Out']})
-    #     teams_true = read_sql("SELECT CONCAT(team_long, ' ', team_name) AS team, team_slug FROM nba.teams", self.db_con).rename({'team': 'Team'}, axis='columns')
-        
-    #     cur_date = dt.datetime.now().date() - dt.timedelta(days=1) # TWEAK THIS AND QUERY 
-    #     game_ids = read_sql(f"SELECT game_date, game_id, matchup FROM nba.league_game_schedule WHERE game_date BETWEEN '{cur_date}' AND '{cur_date + dt.timedelta(days=2)}'", self.db_con)
-    #     game_ids['game_date'] = to_datetime(game_ids['game_date'])
-    #     game_ids = concat([
-    #         game_ids.assign(matchup = lambda x: x.matchup.str.replace(' vs. ', '@')),
-    #         game_ids.assign(matchup = lambda x: [el[1] + '@' + el[0] for el in x.matchup.str.split(' vs. ')])    
-    #     ], ignore_index=True, axis='rows')
-        
-    #     player_ids = read_sql("SELECT nba_name, nba_id FROM util.nba_fty_name_match", self.db_con)
-    #     player_ids['nba_name'] = [unicodedata.normalize('NFKD', el).encode('ascii', 'ignore').decode('utf-8') for el in player_ids['nba_name']] 
-        
-    #     col_order = read_sql("SELECT column_name FROM util.table_column_order WHERE table_name = 'injuries' ORDER BY column_order", self.db_con)['column_name'].to_list()
-    
-    #     # Loop over pdf files, where the magic happens    
-    #     for ix, df in enumerate(dfs):
-        
-    #         if ix > 0:
-        
-    #             # Move column names to row, excluding first df
-    #             colnames_temp = ['Unnamed: ' + str(el) for el in list(range(0, len(df.columns)))]
-    #             df = (concat([
-    #                 DataFrame({key : np.nan if 'Unnamed' in val else val for key, val in dict(zip(colnames_temp, df.columns)).items()}, index=[0]),
-    #                 df.set_axis(colnames_temp, axis=1)
-    #             ]))
-        
-    #             # Column checks
-    #             df = str_search(df, '/', 0, 'Game Date') # first col date search
-    #             df = str_search(df, ':', 1, 'Game Time') # second col time search
-    #             df = str_search(df, '@', 2, 'Matchup') # third col matchup search
-    #             df = occ_count_search(df, teams_true, 3, 'Team') # fourth col test for team
-    #             df = str_search(df, ',', 4, 'Player Name') # fifth col test for player name
-    #             df = occ_count_search(df, status_true, 5, 'Current Status') # sixth col test for status
-    #             df.columns.values[6] = 'Reason' # straigt rename of seventh column
+        # Data objects used to reconcile and complimet injury date
+        status_true = pl.DataFrame({'Current Status': ['Available', 'Probable', 'Questionable', 'Out']})
+        teams_true = pl.read_database("SELECT CONCAT(team_long, ' ', team_name) AS team, team_slug FROM nba.teams", self.db_con).rename({'team': 'Team'})
+
+        cur_date = dt.datetime.now(zoneinfo.ZoneInfo('America/New_York')).date()
+        game_ids = pl.read_database(f"SELECT game_date, game_id, matchup FROM nba.league_game_schedule WHERE game_date BETWEEN '{cur_date}' AND '{cur_date + dt.timedelta(days=2)}'", self.db_con)
+        game_ids = pl.concat(
+            [
+                game_ids.with_columns(pl.col('matchup').str.replace(' vs. ', '@')),
+                (
+                    game_ids
+                    .with_columns(pl.col('matchup').str.split_exact(' vs. ', n=1).alias('matchup_split'))
+                    .unnest('matchup_split')
+                    .with_columns((pl.col('field_1') + '@' + pl.col('field_0')).alias('matchup'))
+                )
+            ], 
+            how = 'diagonal'
+        )
+
+        player_ids = (
+            pl.read_database('SELECT nba_name, nba_id FROM util.nba_fty_name_match', self.db_con)
+            .with_columns(pl.col('nba_name').str.normalize('NFKD').str.replace_all('[^\\x00-\\x7F]', ''))
+        )
+
+        # INNER FUNCTION
+        def str_search(df, str_pat, col_ix, col_name):
+            if df.filter(df[:, col_ix].str.contains(str_pat)).height == 0:
+                df = df.insert_column(index = col_ix, column = pl.Series(col_name, [None] * df.height))
+            else:
+                df = df.rename({df.columns[col_ix]: col_name})
+            return df
+
+        # INNER FUNCTION
+        def occ_count_search(df, df_true, col_ix, col_name):
+            df_search = pl.DataFrame({col_name: [el for el in df[:, col_ix]]}).group_by(col_name).len()
+            if (df_true.join(df_search, on=col_name, how='left').select(pl.col('len').sum()).item() == 0):
+                df = df.insert_column(index = col_ix, column = pl.Series(col_name, [None] * df.height))
+            else:
+                df = df.rename({df.columns[col_ix]: col_name})
+            return df 
+
+        # Loop over pdf files, where the magic happens    
+        for ix, df in enumerate(dfs):
+
+            if ix > 0:
+                # Move column names to row, excluding first df
+                colnames_temp = ['Unnamed: ' + str(el) for el in list(range(0, len(df.columns)))]
+                df = (
+                    pl.concat([
+                        pl.DataFrame({key : None if 'Unnamed' in val else val for key, val in dict(zip(colnames_temp, df.columns)).items()}),
+                        df.rename(lambda c: colnames_temp[df.columns.index(c)])
+                    ], how = 'vertical_relaxed')
+                )
+
+                # Column checks
+                df = str_search(df, '/', 0, 'Game Date') # first col date search
+                df = str_search(df, ':', 1, 'Game Time') # second col time search
+                df = str_search(df, '@', 2, 'Matchup') # third col matchup search
+                df = occ_count_search(df, teams_true, 3, 'Team') # fourth col test for team
+                df = str_search(df, ',', 4, 'Player Name') # fifth col test for player name
+                df = occ_count_search(df, status_true, 5, 'Current Status') # sixth col test for status
+                df = df.rename({df.columns[6]: 'Reason'}) # straight rename of seventh column
                 
-    #         # assign back to index in list
-    #         dfs[ix] = df
-        
-    #     # Merge all and clean
-    #     df = concat(dfs, ignore_index=True)
-    #     df['Game Date'] = df['Game Date'].ffill().bfill()
-    #     df['Game Time'] = df['Game Time'].ffill().bfill()
-    #     df['Matchup'] = df['Matchup'].ffill().bfill()
-    #     df['Team'] = df['Team'].ffill().bfill()
-    #     df['Reason_lead'] = df.groupby('Team')['Reason'].shift(-1)
-        
-    #     # Fix poorly formatted injury rows
-    #     inj_ix = df[(df['Reason_lead'].isna()) & (df['Reason'].str.startswith('Injury/Illness')) & (df['Team'] == df['Team'].shift(-1))].index
-    #     for ix in inj_ix:
-        
-    #         # Rows of interest
-    #         df_temp = df.iloc[range(ix, ix+3), :]
-        
-    #         # Overwrite rows
-    #         df.loc[range(ix, ix+3), 'Player Name'] = [' '.join(df_temp['Player Name'].dropna())]*3
-    #         df.loc[range(ix, ix+3), 'Current Status'] = [' '.join(df_temp['Current Status'].dropna())]*3
-    #         df.loc[range(ix, ix+3), 'Reason'] = [' '.join(df_temp['Reason'].dropna())]*3
-        
-    #     # Drop duplicates and non-submissions & non-names (cheat...for now until better solution)
-    #     df = (
-    #         df.drop('Reason_lead', axis='columns')
-    #         .drop_duplicates()
-    #         .query('Reason != "NOT YET SUBMITTED"')
-    #         .query('`Player Name`.notna()')
-    #         .query('`Game Date`.notna()')
-    #     )
-        
-    #     # Convert columns
-    #     df['Game Date'] = to_datetime(df['Game Date'], format='%m/%d/%Y')
-    #     df['Player Name'] = [el[1] + ' ' + el[0] for el in df['Player Name'].str.split(', ')]
-        
-    #     # Join external dataset
-    #     df = df.merge(teams_true, how = 'left', on='Team') # team slug
-    #     df = df.merge(game_ids, how = 'left', left_on=['Game Date', 'Matchup'], right_on=['game_date', 'matchup']).drop(['game_date', 'matchup'], axis=1)
-    #     df = df.merge(player_ids, how = 'left', left_on='Player Name', right_on='nba_name')
-        
-    #     # Rename cols and reorder
-    #     df.columns = df.columns.str.lower().str.replace(' ', '_')
-    #     df = df.rename(columns = {'current_status': 'status'})
-    #     df = df[col_order]
-        
-    #     # Delete old records from database
-    #     db_ex = self.db_con.connect()
-    #     for _, row in df.iterrows():
-    #         game_date = row['game_date']
-    #         game_id = row['game_id']
-    #         player_name = row['player_name'].replace("'","''") # replace to handle single quotes if they exist
-    #         db_ex.execute(sqlalchemy.sql.text(f"DELETE FROM nba.injuries WHERE game_date = '{game_date}' AND game_id = {game_id} AND player_name = '{player_name}'"))
-    #     db_ex.commit()
-        
-    #     # Write to database
-    #     df.to_sql('injuries', self.db_con, schema='nba', index=False, if_exists='append')
-    #     print('nba.injuries has been updated\n\n')
+            # assign back to index in list
+            dfs[ix] = df
+
+
+        # INNER FUNCTION: Define the combined expression logic
+        def get_combined_expr(col):
+            return (
+                pl.concat_str(
+                    [
+                        pl.col(col).fill_null(''),
+                        pl.col(col).shift(-1).fill_null(''),
+                        pl.col(col).shift(-2).fill_null('')
+                    ],
+                    separator=' '
+                ).str.strip_chars()
+            )
+
+        # Fix poorly formatted injury rows AND clean up for ingestion
+        df = (
+            pl.concat(dfs)
+            .with_columns([
+                pl.col(['Game Date', 'Game Time', 'Matchup', 'Team']).fill_null(strategy='forward').fill_null(strategy='backward'),
+                pl.col('Reason').shift(-1).over('Team').alias('Reason_lead')
+            ])
+
+            # 1. Identify start of block to fix
+            .with_columns(
+                (
+                    pl.col('Reason_lead').is_null() & 
+                    pl.col('Reason').str.starts_with('Injury/Illness') & 
+                    (pl.col('Team') == pl.col('Team').shift(-1))
+                ).alias('is_start')
+            )
+
+            # 2. Add helper columns for Boolean mask and Group IDs
+            .with_columns((pl.col('is_start').cast(pl.Int64).cum_sum()).alias('group_id'))
+
+            # Fix poor formatting
+            .with_columns([
+                pl.when(pl.col('is_start') | pl.col('is_start').shift(1) | pl.col('is_start').shift(2))
+                .then(get_combined_expr(col).first().over('group_id'))
+                .otherwise(pl.col(col))
+                .alias(col)
+                for col in ['Player Name', 'Current Status', 'Reason']
+            ])
+
+            # Clean up
+            .with_columns(pl.col('Player Name').str.split_exact(', ', n=1).alias('name_split'))
+            .unnest('name_split')
+            .with_columns([
+                pl.col('Game Date').str.to_date(format='%m/%d/%Y'),
+                (pl.col('field_1') + ' ' + pl.col('field_0')).alias('Player Name')
+            ])
+            .drop(['is_start', 'group_id', 'Reason_lead']) 
+            .unique()
+            .filter(
+                (pl.col('Reason') != 'NOT YET SUBMITTED') &
+                (pl.col('Player Name').is_not_null()) &
+                (pl.col('Game Date').is_not_null())
+            )
+            .join(teams_true, how = 'left', on = 'Team')
+            .join(player_ids, how = 'left', left_on = 'Player Name', right_on = 'nba_name')
+            .join(game_ids, how = 'left', left_on=['Game Date', 'Matchup'], right_on=['game_date', 'matchup'])
+            .clean_names()
+            .rename({'current_status': 'status'})
+            .select(col_order)
+        )
+
+
+        # Delete old records from database
+        db_ex = self.db_con.connect()
+        for row in df.iter_rows(named=True):
+            game_date = row['game_date']
+            game_id = row['game_id']
+            player_name = row['player_name'].replace("'","''") # replace to handle single quotes if they exist
+            db_ex.execute(sqlalchemy.sql.text(f"DELETE FROM nba.injuries WHERE game_date = '{game_date}' AND game_id = {game_id} AND player_name = '{player_name}'"))
+        db_ex.commit()
+
+        # Write to database
+        df.to_pandas().to_sql('injuries', self.db_con, schema='nba', index=False, if_exists='append')
+        print('nba.injuries has been updated\n\n')
 
 
     
-    # # NEED TO CHECK IF WORKS
-    # def get_box_score(self):
-        
-    #     bs_max_dt = (
-    #         read_sql("""
-    #             SELECT MAX(ls.game_date) 
-    #             FROM nba.team_box_score AS bs
-    #             INNER JOIN nba.league_game_schedule AS ls on bs.game_id = ls.game_id
-    #         """, self.db_con)
-    #         ['max'][0]
-    #         .strftime('%Y-%m-%d')
-    #     )
+    def get_box_score(self):
 
-    #     game_ids = (
-    #         read_sql(f"""
-    #             SELECT game_id, game_date
-    #             FROM nba.league_game_schedule
-    #             WHERE game_date > '{bs_max_dt}' AND game_date <= current_date
-    #         """, self.db_con)
-    #     )
+        bs_max_dt = (
+            pl.read_database('SELECT MAX(game_date) FROM nba.nba_team_box_score_vw', self.db_con)
+            .get_column('max')
+            .to_list()[0]
+            .strftime('%Y-%m-%d')
+        )
 
-    #     trad_adv_lst = ['player', 'team']
+        game_ids = pl.read_database(
+            f"SELECT game_id, game_date FROM nba.league_game_schedule WHERE game_date > '{bs_max_dt}' AND game_date <= current_date", 
+            self.db_con
+        )
 
-    #     print('\n--------------------- nba.player/team_box_score')
-    #     g_ids = game_ids['game_id'] # [0:3]
-    #     for game_id in g_ids:
-    #         game_id = '00' + str(int(game_id))
-    #         print(game_id)
+        trad_adv_lst = ['player', 'team']
 
-    #         # GIVE UP ON ADVANCED STATS FOR TIME BEING...v2 and v3 giving errors
+        print('\n--------------------- nba.player/team_box_score')
+        g_ids = game_ids.get_column('game_id').to_list()[0:3]
+        for game_id in g_ids:
+            game_id = '00' + str(int(game_id))
+            print(game_id)
 
-    #         dfs = []
-    #         # bsa = boxscoreadvancedv2.BoxScoreAdvancedV2(game_id=game_id)
-    #         # if len(bsa.get_normalized_dict()['PlayerStats']) == 0:
-    #         #     continue
 
-    #         # ideally this comes from v2, but it stopped working for some reason
-    #         try:
-    #             bst = nba_ep.boxscoretraditionalv3.BoxScoreTraditionalV3(game_id=game_id)
-    #         except Exception as e:
-    #             print(game_id + ': ' + str(e))
-    #             continue
+            dfs = []
+            try:
+                bst = nba_ep.boxscoretraditionalv3.BoxScoreTraditionalV3(game_id=game_id)
+            except Exception as e:
+                print(game_id + ': ' + str(e))
+                continue
 
-    #         for el in [0, 1]:
+            for el in [0, 1]:
 
-    #             # bst dict new becase v2 stopeed working
-    #             # bsa_col_order = read_sql(f"SELECT column_name FROM util.table_column_order WHERE table_name = '{trad_adv_lst[el]}_box_score_advanced' ORDER BY column_order", self.db_con)['column_name'].to_list()
-    #             bst_col_order = read_sql(f"SELECT column_name FROM util.table_column_order WHERE table_name = '{trad_adv_lst[el]}_box_score_traditional' ORDER BY column_order", self.db_con)['column_name'].to_list()
-    #             if(el == 0):
-    #                 bst_rename_dict = dict(zip(['gameId', 'teamId', 'teamTricode', 'personId', 'playerName', 'position', 'comment', 'minutes', 'fieldGoalsMade', 'fieldGoalsAttempted', 'fieldGoalsPercentage', 'threePointersMade', 'threePointersAttempted', 'threePointersPercentage', 'freeThrowsMade', 'freeThrowsAttempted', 'freeThrowsPercentage', 'points', 'reboundsOffensive', 'reboundsDefensive', 'reboundsTotal', 'assists', 'steals', 'blocks', 'turnovers', 'foulsPersonal', 'plusMinusPoints'], bst_col_order))    
-    #             else:
-    #                 bst_rename_dict = dict(zip(['gameId', 'teamId', 'teamTricode', 'minutes', 'fieldGoalsMade', 'fieldGoalsAttempted', 'fieldGoalsPercentage', 'threePointersMade', 'threePointersAttempted', 'threePointersPercentage', 'freeThrowsMade', 'freeThrowsAttempted', 'freeThrowsPercentage', 'points', 'reboundsOffensive', 'reboundsDefensive', 'reboundsTotal', 'assists', 'steals', 'blocks', 'turnovers', 'foulsPersonal'], bst_col_order))    
+                bst_col_order = (
+                    pl.read_database(
+                        f"SELECT column_name FROM util.table_column_order WHERE table_name = '{trad_adv_lst[el]}_box_score_traditional' ORDER BY column_order", 
+                        self.db_con
+                    )
+                    .get_column('column_name')
+                    .to_list()
+                )
+
+                if(el == 0):
+                    bst_rename_dict = dict(zip(['gameId', 'teamId', 'teamTricode', 'personId', 'playerName', 'position', 'comment', 'minutes', 'fieldGoalsMade', 'fieldGoalsAttempted', 'fieldGoalsPercentage', 'threePointersMade', 'threePointersAttempted', 'threePointersPercentage', 'freeThrowsMade', 'freeThrowsAttempted', 'freeThrowsPercentage', 'points', 'reboundsOffensive', 'reboundsDefensive', 'reboundsTotal', 'assists', 'steals', 'blocks', 'turnovers', 'foulsPersonal', 'plusMinusPoints'], bst_col_order))    
+                else:
+                    bst_rename_dict = dict(zip(['gameId', 'teamId', 'teamTricode', 'minutes', 'fieldGoalsMade', 'fieldGoalsAttempted', 'fieldGoalsPercentage', 'threePointersMade', 'threePointersAttempted', 'threePointersPercentage', 'freeThrowsMade', 'freeThrowsAttempted', 'freeThrowsPercentage', 'points', 'reboundsOffensive', 'reboundsDefensive', 'reboundsTotal', 'assists', 'steals', 'blocks', 'turnovers', 'foulsPersonal'], bst_col_order))    
                 
-    #             # New V3 operations...v2 was returning empty dfs for some reason
-    #             bst_df = (
-    #                 bst.get_data_frames()[el]
-    #                 .rename(columns=bst_rename_dict)            
-    #                 .assign(
-    #                     min = lambda x: [int(re.sub(r':.*', '', el)) if el != '' else None for el in x['min']],
-    #                     game_id = lambda x: x['game_id'].astype('int')
-    #                 )
-    #             )
+                df = (
+                    pl.from_pandas(bst.get_data_frames()[el])
+                    .rename({k: v for k, v in bst_rename_dict.items() if k != 'playerName'})
+                    .with_columns([
+                        pl.col('min').replace('', None),
+                        pl.col('game_id').cast(pl.Int64)
+                    ])   
+                    .with_columns(pl.col('min').str.replace(r':.*', '').cast(pl.Int64))
+                )
 
-    #             if(el == 0): 
-    #                 bst_df = bst_df.assign(player_name = lambda x: x['firstName'] + ' ' + x['familyName'])
-    #             else:
-    #                 bst_df = (
-    #                     bst_df
-    #                     .groupby(['game_id', 'team_id', 'team_abbreviation'], as_index=False)
-    #                     [['min', 'fgm', 'fga', 'fg3_m', 'fg3_a', 'ftm', 'fta', 'pts', 'oreb', 'dreb', 'reb', 'ast', 'stl', 'blk', 'tov', 'pf']]
-    #                     .sum()
-    #                     .assign(
-    #                         fg_pct=lambda x: x['fgm'] / x['fga'],
-    #                         fg3_pct=lambda x: x['fg3_m'] / x['fg3_a'],
-    #                         ft_pct=lambda x: x['ftm'] / x['fta'],
-    #                         plus_minus = None # just make none for place holder
-    #                     )
-    #                 )
+                if(el == 0): 
+                    df = df.with_columns((pl.col('firstName') + ' ' + pl.col('familyName')).alias('player_name'))
+                else:
+                    df = (
+                        df
+                        .group_by(['game_id', 'team_id', 'team_abbreviation'])
+                        .agg(cs.numeric().sum())
+                        .with_columns([
+                            (pl.col('fgm') / pl.col('fga')).alias('fg_pct'),
+                            (pl.col('fg3_m') / pl.col('fg3_a')).alias('fg3_pct'),
+                            (pl.col('ftm') / pl.col('fta')).alias('ft_pct'),
+                            pl.lit(None).alias('plus_minus') # just make none for place holder
+                        ])
+                    )
 
-    #             bst_df = bst_df.drop_duplicates()[bst_col_order]
+                df = df.unique().select(bst_col_order)
+                dfs.append(df)
 
-    #             # bsa_df = (
-    #             #     bsa
-    #             #     .get_data_frames()[el]
-    #             #     .rename(snakecase.convert, axis='columns')
-    #             #     .drop_duplicates()
-    #             #     .assign(game_id = lambda x: x['game_id'].astype('int'))
-    #             #     [bsa_col_order]
-    #             # )
+            dfs[0].to_pandas().to_sql('player_box_score', self.db_con, schema='nba', index=False, if_exists='append')
+            dfs[1].to_pandas().to_sql('team_box_score', self.db_con, schema='nba', index=False, if_exists='append')
 
-    #             # jn_cols = list(set(bst_df.columns) & set(bsa_df.columns))
-    #             # df = bst_df.merge(bsa_df, how='left', on=jn_cols)
-    #             df = bst_df          # placeholder for advanced join
-    #             df = df.rename(columns = {'to': 'tov'})
-    #             dfs.append(df)
-
-    #         dfs[0].to_sql('player_box_score', self.db_con, schema='nba', index=False, if_exists='append')
-    #         dfs[1].to_sql('team_box_score', self.db_con, schema='nba', index=False, if_exists='append')
-
-    #     print('nba.player/team_box_score have been updated\n\n')
+        print('nba.player/team_box_score have been updated\n\n')
 
         
 
-    
-    # def update_past_game_schedule(self, season='current'):
-    #     col_order = read_sql("SELECT column_name FROM util.table_column_order WHERE table_name = 'league_game_schedule' ORDER BY column_order", self.db_con)['column_name'].to_list()
+    def update_past_game_schedule(self, season='current'):
         
-    #     if season == 'current':
-    #         season = self.cur_season_year
-    #     else:
-    #         season = self.prev_season_year
+        col_order = (
+            pl.read_database(
+                "SELECT column_name FROM util.table_column_order WHERE table_name = 'league_game_schedule' ORDER BY column_order", 
+                self.db_con
+            )
+            .get_column('column_name')
+            .to_list()
+        )
 
-    #     print('\n--------------------- nba.historical_league_game_schedule')
-    #     dfs = [] 
-    #     for type_season in ['Regular Season', 'Pre Season', 'Playoffs', 'All Star']:
-    #         hist_game_schedule = nba_ep.leaguegamelog.LeagueGameLog(season_type_all_star=type_season, season=season)
-    #         hist_game_schedule = hist_game_schedule.get_data_frames()[0]
-    #         hist_game_schedule['type_season'] = type_season
-    #         dfs.append(hist_game_schedule)
-    #         time.sleep(1)
+        if season == 'current':
+            season = self.cur_season_year
+        else:
+            season = self.prev_season_year
 
-    #     df = concat(dfs, ignore_index=True)
-    #     df['GAME_ID'] = df['GAME_ID'].astype(float)
-    #     df = df.groupby(['GAME_ID']).head(1)
-    #     df['GAME_DATE'] = [dateutil.parser.prase(el).date() for el in df['GAME_DATE']]
-    #     df['opponent'] = df['MATCHUP'].str.replace(r'[ @ | vs. ]', '', regex=True)
-    #     df['opponent'] = df.apply(lambda x: x['opponent'].replace(x['TEAM_ABBREVIATION'], ''), axis=1)
-    #     df['team_winner'] = np.where(df['WL'] == 'W', df['TEAM_ABBREVIATION'], df['opponent'])
-    #     df['team_loser'] = np.where(df['WL'] == 'L', df['TEAM_ABBREVIATION'], df['opponent'])
-    #     df['season'] = f"{season}-{str(season+1)[-2:]}"
-    #     df = df.rename(snakecase.convert, axis='columns')
-    #     df = df.rename(columns = {'type_season': 'season_type'})
-    #     df = df[col_order]
+        print('\n--------------------- nba.historical_league_game_schedule')
+        dfs = [] 
+        for type_season in ['Regular Season', 'Pre Season', 'Playoffs', 'All Star']:
+            hist_game_schedule = nba_ep.leaguegamelog.LeagueGameLog(season_type_all_star=type_season, season=season)
+            dfs.append((
+                pl.from_pandas(hist_game_schedule.get_data_frames()[0])
+                .with_columns(pl.lit(type_season).alias('season_type'))
+            ))
+            time.sleep(1)
 
-    #     db_ex = self.db_con.connect()
-    #     db_ex.execute(sqlalchemy.sql.text(f"DELETE FROM nba.league_game_schedule WHERE season = '{season}-{str(season+1)[-2:]}'"))
-    #     db_ex.commit()
+        df = (
+            pl.concat(dfs)
+            .clean_names()
+            .with_columns([
+                pl.col('game_id').cast(pl.Float64),
+                pl.col('game_date').str.to_date(),
+                pl.lit(f'{season}-{str(season+1)[-2:]}').alias('season'),
+                pl.col('matchup').str.replace_all(r' @ | vs\.? ', '-').alias('opponent')
+            ])
+            .with_columns(pl.col('opponent').str.split('-'))
+            .with_columns(
+                pl.when(pl.col('team_abbreviation') == pl.col('opponent').list.get(0))
+                .then(pl.col('opponent').list.get(1))
+                .otherwise(pl.col('opponent').list.get(0))
+                .alias('opponent')
+            )
+            .with_columns([
+                pl.when(pl.col('wl') == 'W').then(pl.col('team_abbreviation')).otherwise(pl.col('opponent')).alias('team_winner'),
+                pl.when(pl.col('wl') == 'L').then(pl.col('team_abbreviation')).otherwise(pl.col('opponent')).alias('team_loser')
+            ])
+            .select(col_order)
+        )
 
-    #     df.to_sql('league_game_schedule', self.db_con, schema='nba', index=False, if_exists='append')
-    #     print('nba.historical_game_schedule has been updated\n\n')
+
+        db_ex = self.db_con.connect()
+        db_ex.execute(sqlalchemy.sql.text(f"DELETE FROM nba.league_game_schedule WHERE season = '{season}-{str(season+1)[-2:]}'"))
+        db_ex.commit()
+
+        df.to_pandas().to_sql('league_game_schedule', self.db_con, schema='nba', index=False, if_exists='append')
+        print('nba.historical_game_schedule has been updated\n\n')
 
 
     
