@@ -61,7 +61,8 @@ class dataHub:
         """Season stats (totals)"""
 
         col_order = pl.read_database(
-            "SELECT column_name FROM util.table_column_order WHERE table_name = 'player_season_stats' ORDER BY column_order", self.db_con
+            "SELECT column_name FROM util.table_column_order WHERE table_name = 'player_season_stats' ORDER BY column_order",
+            self.db_con,
         )['column_name'].to_list()
         ls_pl = self.active_players['id'].to_list()  # [480:571]
 
@@ -87,12 +88,15 @@ class dataHub:
         )
 
         # Write to database
-        df.to_pandas().to_sql('player_season_stats', self.db_con, schema='nba', index=False, if_exists='append')
+        df.to_pandas().to_sql(
+            'player_season_stats', self.db_con, schema='nba', index=False, if_exists='append'
+        )
         print('nba.player_season_stats has been updated\n\n')
 
     def get_player_info(self):
         col_order = pl.read_database(
-            "SELECT column_name FROM util.table_column_order WHERE table_name = 'player_info' ORDER BY column_order", self.db_con
+            "SELECT column_name FROM util.table_column_order WHERE table_name = 'player_info' ORDER BY column_order",
+            self.db_con,
         )['column_name'].to_list()
         ls_pl = self.active_players['id'].to_list()  # [550:615]
 
@@ -116,8 +120,12 @@ class dataHub:
             .with_columns(
                 [
                     pl.lit(self.cur_season).alias('season'),
-                    (pl.col('weight').cast(pl.Float64, strict=False) / 2.2046).round(3).alias('weight_kg'),
-                    ((pl.col('height').list.get(0) * 12 + pl.col('height').list.get(1)) * 2.54).round(2).alias('height_cm'),
+                    (pl.col('weight').cast(pl.Float64, strict=False) / 2.2046)
+                    .round(3)
+                    .alias('weight_kg'),
+                    ((pl.col('height').list.get(0) * 12 + pl.col('height').list.get(1)) * 2.54)
+                    .round(2)
+                    .alias('height_cm'),
                 ]
             )
             .rename({'person_id': 'player_id'})
@@ -125,15 +133,20 @@ class dataHub:
         )
 
         # Write to database
-        df.to_pandas().to_sql('player_info', self.db_con, schema='nba', index=False, if_exists='append')
+        df.to_pandas().to_sql(
+            'player_info', self.db_con, schema='nba', index=False, if_exists='append'
+        )
         print('nba.player_info has been updated\n\n')
 
     def get_team_injuries(self):
         col_order = pl.read_database(
-            "SELECT column_name FROM util.table_column_order WHERE table_name = 'injuries' ORDER BY column_order", self.db_con
+            "SELECT column_name FROM util.table_column_order WHERE table_name = 'injuries' ORDER BY column_order",
+            self.db_con,
         )['column_name'].to_list()
         url = f'https://official.nba.com/nba-injury-report-{self.cur_season}-season/'  # URL from which pdfs to be downloaded
-        response = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'})  # Requests URL and get response object
+        response = requests.get(
+            url, headers={'User-Agent': 'Mozilla/5.0'}
+        )  # Requests URL and get response object
         soup = bs4.BeautifulSoup(response.text, 'html.parser')  # Parse text obtained
         links = soup.find_all('a')  # Find all hyperlinks present on webpage
 
@@ -142,8 +155,12 @@ class dataHub:
         readings_pdf = {}
         for link in links:
             if link.decode_contents().endswith('ET report'):
-                readings_time[link.contents[0]] = dateutil.parser.parse(link.contents[0], fuzzy=True, ignoretz=True)
-                readings_pdf[link.contents[0]] = requests.get(link.get('href'), headers={'User-Agent': 'Mozilla/5.0'})
+                readings_time[link.contents[0]] = dateutil.parser.parse(
+                    link.contents[0], fuzzy=True, ignoretz=True
+                )
+                readings_pdf[link.contents[0]] = requests.get(
+                    link.get('href'), headers={'User-Agent': 'Mozilla/5.0'}
+                )
 
         # Write pdf file
         pdf = open('injury.pdf', 'wb')
@@ -155,14 +172,19 @@ class dataHub:
         left = 19
         width = 804
         height = 438
-        dfs = tabula.read_pdf('injury.pdf', area=[top, left, top + height, left + width], pages='all')  # pdf pages
+        dfs = tabula.read_pdf(
+            'injury.pdf', area=[top, left, top + height, left + width], pages='all'
+        )  # pdf pages
         dfs = [pl.from_pandas(el) for el in dfs]
 
         # Data objects used to reconcile and complimet injury date
-        status_true = pl.DataFrame({'Current Status': ['Available', 'Probable', 'Questionable', 'Out']})
-        teams_true = pl.read_database("SELECT CONCAT(team_long, ' ', team_name) AS team, team_slug FROM nba.teams", self.db_con).rename(
-            {'team': 'Team'}
+        status_true = pl.DataFrame(
+            {'Current Status': ['Available', 'Probable', 'Questionable', 'Out']}
         )
+        teams_true = pl.read_database(
+            "SELECT CONCAT(team_long, ' ', team_name) AS team, team_slug FROM nba.teams",
+            self.db_con,
+        ).rename({'team': 'Team'})
 
         cur_date = dt.datetime.now(zoneinfo.ZoneInfo('America/New_York')).date()
         game_ids = pl.read_database(
@@ -173,15 +195,21 @@ class dataHub:
             [
                 game_ids.with_columns(pl.col('matchup').str.replace(' vs. ', '@')),
                 (
-                    game_ids.with_columns(pl.col('matchup').str.split_exact(' vs. ', n=1)).with_columns(
-                        (pl.col('matchup').list.get(1) + '@' + pl.col('matchup').list.get(0)).alias('matchup')
+                    game_ids.with_columns(
+                        pl.col('matchup').str.split_exact(' vs. ', n=1)
+                    ).with_columns(
+                        (pl.col('matchup').list.get(1) + '@' + pl.col('matchup').list.get(0)).alias(
+                            'matchup'
+                        )
                     )
                 ),
             ],
             how='diagonal',
         )
 
-        player_ids = pl.read_database('SELECT nba_name, nba_id FROM util.nba_fty_name_match', self.db_con).with_columns(
+        player_ids = pl.read_database(
+            'SELECT nba_name, nba_id FROM util.nba_fty_name_match', self.db_con
+        ).with_columns(
             pl.col('nba_name').str.normalize('NFKD').str.replace_all('[^\\x00-\\x7F]', '')
         )
 
@@ -195,8 +223,13 @@ class dataHub:
 
         # INNER FUNCTION
         def occ_count_search(df, df_true, col_ix, col_name):
-            df_search = pl.DataFrame({col_name: [el for el in df[:, col_ix]]}).group_by(col_name).len()
-            if df_true.join(df_search, on=col_name, how='left').select(pl.col('len').sum()).item() == 0:
+            df_search = (
+                pl.DataFrame({col_name: [el for el in df[:, col_ix]]}).group_by(col_name).len()
+            )
+            if (
+                df_true.join(df_search, on=col_name, how='left').select(pl.col('len').sum()).item()
+                == 0
+            ):
                 df = df.insert_column(index=col_ix, column=pl.Series(col_name, [None] * df.height))
             else:
                 df = df.rename({df.columns[col_ix]: col_name})
@@ -209,7 +242,12 @@ class dataHub:
                 colnames_temp = ['Unnamed: ' + str(el) for el in list(range(0, len(df.columns)))]
                 df = pl.concat(
                     [
-                        pl.DataFrame({key: None if 'Unnamed' in val else val for key, val in dict(zip(colnames_temp, df.columns)).items()}),
+                        pl.DataFrame(
+                            {
+                                key: None if 'Unnamed' in val else val
+                                for key, val in dict(zip(colnames_temp, df.columns)).items()
+                            }
+                        ),
                         df.rename(lambda c: colnames_temp[df.columns.index(c)]),
                     ],
                     how='vertical_relaxed',
@@ -221,7 +259,9 @@ class dataHub:
                 df = str_search(df, '@', 2, 'Matchup')  # third col matchup search
                 df = occ_count_search(df, teams_true, 3, 'Team')  # fourth col test for team
                 df = str_search(df, ',', 4, 'Player Name')  # fifth col test for player name
-                df = occ_count_search(df, status_true, 5, 'Current Status')  # sixth col test for status
+                df = occ_count_search(
+                    df, status_true, 5, 'Current Status'
+                )  # sixth col test for status
                 df = df.rename({df.columns[6]: 'Reason'})  # straight rename of seventh column
 
             # assign back to index in list
@@ -230,7 +270,12 @@ class dataHub:
         # INNER FUNCTION: Define the combined expression logic
         def get_combined_expr(col):
             return pl.concat_str(
-                [pl.col(col).fill_null(''), pl.col(col).shift(-1).fill_null(''), pl.col(col).shift(-2).fill_null('')], separator=' '
+                [
+                    pl.col(col).fill_null(''),
+                    pl.col(col).shift(-1).fill_null(''),
+                    pl.col(col).shift(-2).fill_null(''),
+                ],
+                separator=' ',
             ).str.strip_chars()
 
         # Fix poorly formatted injury rows AND clean up for ingestion
@@ -238,7 +283,9 @@ class dataHub:
             pl.concat(dfs)
             .with_columns(
                 [
-                    pl.col(['Game Date', 'Game Time', 'Matchup', 'Team']).fill_null(strategy='forward').fill_null(strategy='backward'),
+                    pl.col(['Game Date', 'Game Time', 'Matchup', 'Team'])
+                    .fill_null(strategy='forward')
+                    .fill_null(strategy='backward'),
                     pl.col('Reason').shift(-1).over('Team').alias('Reason_lead'),
                 ]
             )
@@ -255,7 +302,11 @@ class dataHub:
             # Fix poor formatting
             .with_columns(
                 [
-                    pl.when(pl.col('is_start') | pl.col('is_start').shift(1) | pl.col('is_start').shift(2))
+                    pl.when(
+                        pl.col('is_start')
+                        | pl.col('is_start').shift(1)
+                        | pl.col('is_start').shift(2)
+                    )
                     .then(get_combined_expr(col).first().over('group_id'))
                     .otherwise(pl.col(col))
                     .alias(col)
@@ -267,15 +318,26 @@ class dataHub:
             .with_columns(
                 [
                     pl.col('Game Date').str.to_date(format='%m/%d/%Y'),
-                    (pl.col('Player Name').list.get(1) + ' ' + pl.col('Player Name').list.get(0)).alias('Player Name'),
+                    (
+                        pl.col('Player Name').list.get(1) + ' ' + pl.col('Player Name').list.get(0)
+                    ).alias('Player Name'),
                 ]
             )
             .drop(['is_start', 'group_id', 'Reason_lead'])
             .unique()
-            .filter((pl.col('Reason') != 'NOT YET SUBMITTED') & (pl.col('Player Name').is_not_null()) & (pl.col('Game Date').is_not_null()))
+            .filter(
+                (pl.col('Reason') != 'NOT YET SUBMITTED')
+                & (pl.col('Player Name').is_not_null())
+                & (pl.col('Game Date').is_not_null())
+            )
             .join(teams_true, how='left', on='Team')
             .join(player_ids, how='left', left_on='Player Name', right_on='nba_name')
-            .join(game_ids, how='left', left_on=['Game Date', 'Matchup'], right_on=['game_date', 'matchup'])
+            .join(
+                game_ids,
+                how='left',
+                left_on=['Game Date', 'Matchup'],
+                right_on=['game_date', 'matchup'],
+            )
             .clean_names()
             .rename({'current_status': 'status'})
             .select(col_order)
@@ -286,7 +348,9 @@ class dataHub:
         for row in df.iter_rows(named=True):
             game_date = row['game_date']
             game_id = row['game_id']
-            player_name = row['player_name'].replace("'", "''")  # replace to handle single quotes if they exist
+            player_name = row['player_name'].replace(
+                "'", "''"
+            )  # replace to handle single quotes if they exist
             db_ex.execute(
                 sqlalchemy.sql.text(
                     f"DELETE FROM nba.injuries WHERE game_date = '{game_date}' AND game_id = {game_id} AND player_name = '{player_name}'"
@@ -295,11 +359,17 @@ class dataHub:
         db_ex.commit()
 
         # Write to database
-        df.to_pandas().to_sql('injuries', self.db_con, schema='nba', index=False, if_exists='append')
+        df.to_pandas().to_sql(
+            'injuries', self.db_con, schema='nba', index=False, if_exists='append'
+        )
         print('nba.injuries has been updated\n\n')
 
     def get_box_score(self):
-        bs_max_dt = pl.read_database('SELECT MAX(game_date) FROM nba.nba_team_box_score_vw', self.db_con).item().strftime('%Y-%m-%d')
+        bs_max_dt = (
+            pl.read_database('SELECT MAX(game_date) FROM nba.nba_team_box_score_vw', self.db_con)
+            .item()
+            .strftime('%Y-%m-%d')
+        )
         game_ids = pl.read_database(
             f"SELECT game_id, game_date FROM nba.league_game_schedule WHERE game_date > '{bs_max_dt}' AND game_date <= current_date",
             self.db_con,
@@ -394,12 +464,16 @@ class dataHub:
                 df = (
                     pl.from_pandas(bst.get_data_frames()[el])
                     .rename({k: v for k, v in bst_rename_dict.items() if k != 'playerName'})
-                    .with_columns([pl.col('min').replace('', None), pl.col('game_id').cast(pl.Int64)])
+                    .with_columns(
+                        [pl.col('min').str.replace('', None), pl.col('game_id').cast(pl.Int64)]
+                    )
                     .with_columns(pl.col('min').str.replace(r':.*', '').cast(pl.Int64))
                 )
 
                 if el == 0:
-                    df = df.with_columns((pl.col('firstName') + ' ' + pl.col('familyName')).alias('player_name'))
+                    df = df.with_columns(
+                        (pl.col('firstName') + ' ' + pl.col('familyName')).alias('player_name')
+                    )
                 else:
                     df = (
                         df.group_by(['game_id', 'team_id', 'team_abbreviation'])
@@ -417,14 +491,19 @@ class dataHub:
                 df = df.unique().select(bst_col_order)
                 dfs.append(df)
 
-            dfs[0].to_pandas().to_sql('player_box_score', self.db_con, schema='nba', index=False, if_exists='append')
-            dfs[1].to_pandas().to_sql('team_box_score', self.db_con, schema='nba', index=False, if_exists='append')
+            dfs[0].to_pandas().to_sql(
+                'player_box_score', self.db_con, schema='nba', index=False, if_exists='append'
+            )
+            dfs[1].to_pandas().to_sql(
+                'team_box_score', self.db_con, schema='nba', index=False, if_exists='append'
+            )
 
         print('nba.player/team_box_score have been updated\n\n')
 
     def update_past_game_schedule(self, season='current'):
         col_order = pl.read_database(
-            "SELECT column_name FROM util.table_column_order WHERE table_name = 'league_game_schedule' ORDER BY column_order", self.db_con
+            "SELECT column_name FROM util.table_column_order WHERE table_name = 'league_game_schedule' ORDER BY column_order",
+            self.db_con,
         )['column_name'].to_list()
 
         if season == 'current':
@@ -435,8 +514,16 @@ class dataHub:
         print('\n--------------------- nba.historical_league_game_schedule')
         dfs = []
         for type_season in ['Regular Season', 'Pre Season', 'Playoffs', 'All Star']:
-            hist_game_schedule = nba_ep.leaguegamelog.LeagueGameLog(season_type_all_star=type_season, season=season)
-            dfs.append((pl.from_pandas(hist_game_schedule.get_data_frames()[0]).with_columns(pl.lit(type_season).alias('season_type'))))
+            hist_game_schedule = nba_ep.leaguegamelog.LeagueGameLog(
+                season_type_all_star=type_season, season=season
+            )
+            dfs.append(
+                (
+                    pl.from_pandas(hist_game_schedule.get_data_frames()[0]).with_columns(
+                        pl.lit(type_season).alias('season_type')
+                    )
+                )
+            )
             time.sleep(1)
 
         df = (
@@ -459,30 +546,44 @@ class dataHub:
             )
             .with_columns(
                 [
-                    pl.when(pl.col('wl') == 'W').then(pl.col('team_abbreviation')).otherwise(pl.col('opponent')).alias('team_winner'),
-                    pl.when(pl.col('wl') == 'L').then(pl.col('team_abbreviation')).otherwise(pl.col('opponent')).alias('team_loser'),
+                    pl.when(pl.col('wl') == 'W')
+                    .then(pl.col('team_abbreviation'))
+                    .otherwise(pl.col('opponent'))
+                    .alias('team_winner'),
+                    pl.when(pl.col('wl') == 'L')
+                    .then(pl.col('team_abbreviation'))
+                    .otherwise(pl.col('opponent'))
+                    .alias('team_loser'),
                 ]
             )
             .select(col_order)
         )
 
         db_ex = self.db_con.connect()
-        db_ex.execute(sqlalchemy.sql.text(f"DELETE FROM nba.league_game_schedule WHERE season = '{season}-{str(season + 1)[-2:]}'"))
+        db_ex.execute(
+            sqlalchemy.sql.text(
+                f"DELETE FROM nba.league_game_schedule WHERE season = '{season}-{str(season + 1)[-2:]}'"
+            )
+        )
         db_ex.commit()
 
-        df.to_pandas().to_sql('league_game_schedule', self.db_con, schema='nba', index=False, if_exists='append')
+        df.to_pandas().to_sql(
+            'league_game_schedule', self.db_con, schema='nba', index=False, if_exists='append'
+        )
         print('nba.historical_game_schedule has been updated\n\n')
 
     def get_next_game_schedule(self):
         request = requests.get('https://cdn.nba.com/static/json/staticData/scheduleLeagueV2_1.json')
         key_dates = pl.read_database('SELECT * FROM nba.key_dates', self.db_con)
         col_order = pl.read_database(
-            "SELECT column_name FROM util.table_column_order WHERE table_name = 'league_game_schedule' ORDER BY column_order", self.db_con
+            "SELECT column_name FROM util.table_column_order WHERE table_name = 'league_game_schedule' ORDER BY column_order",
+            self.db_con,
         )['column_name'].to_list()
 
         # Remove games already played this season - This assumes update_past_game_schedule is run first
         df_played_games = pl.read_database(
-            f"SELECT * FROM nba.league_game_schedule WHERE season = '{self.cur_season}' AND team_winner IS NOT NULL", self.db_con
+            f"SELECT * FROM nba.league_game_schedule WHERE season = '{self.cur_season}' AND team_winner IS NOT NULL",
+            self.db_con,
         )
 
         df = []
@@ -492,35 +593,56 @@ class dataHub:
                     {
                         'game_id': int(game['gameId']),
                         'game_date': dateutil.parser.parse(game_date['gameDate']).date(),
-                        'matchup': game['homeTeam']['teamTricode'] + ' vs. ' + game['awayTeam']['teamTricode'],
+                        'matchup': game['homeTeam']['teamTricode']
+                        + ' vs. '
+                        + game['awayTeam']['teamTricode'],
                     }
                 )
 
         df = (
             pl.DataFrame(df)
-            .with_columns([pl.lit(self.cur_season).alias('season'), pl.lit(None).alias('team_winner'), pl.lit(None).alias('team_loser')])
-            .join_where(key_dates, pl.col('game_date') >= pl.col('begin_date'), pl.col('game_date') <= pl.col('end_date'))
+            .with_columns(
+                [
+                    pl.lit(self.cur_season).alias('season'),
+                    pl.lit(None).alias('team_winner'),
+                    pl.lit(None).alias('team_loser'),
+                ]
+            )
+            .join_where(
+                key_dates,
+                pl.col('game_date') >= pl.col('begin_date'),
+                pl.col('game_date') <= pl.col('end_date'),
+            )
             .select(col_order)
             .unique()
-            .join(df_played_games.select('game_id').with_columns(pl.col('game_id').cast(pl.Int64)), on='game_id', how='anti')
+            .join(
+                df_played_games.select('game_id').with_columns(pl.col('game_id').cast(pl.Int64)),
+                on='game_id',
+                how='anti',
+            )
         )
 
         # Need to consider when IN-Season tourney games / All star games are added to schedule
 
         # Write to database
-        df.to_pandas().to_sql('league_game_schedule', self.db_con, schema='nba', index=False, if_exists='append')
+        df.to_pandas().to_sql(
+            'league_game_schedule', self.db_con, schema='nba', index=False, if_exists='append'
+        )
         print('nba.current_game_schedule has been updated\n\n')
 
     def get_team_roster(self):
         col_order = pl.read_database(
-            "SELECT column_name FROM util.table_column_order WHERE table_name = 'team_roster' ORDER BY column_order", self.db_con
+            "SELECT column_name FROM util.table_column_order WHERE table_name = 'team_roster' ORDER BY column_order",
+            self.db_con,
         )['column_name'].to_list()
         teams = self.nba_teams['id'].to_list()
 
         print('\n--------------------- nba.team_roster')
         dfs = []
         for team in teams:
-            common_teamroster = nba_ep.commonteamroster.CommonTeamRoster(season=self.cur_season_year, team_id=team)
+            common_teamroster = nba_ep.commonteamroster.CommonTeamRoster(
+                season=self.cur_season_year, team_id=team
+            )
             dfs.append(pl.from_pandas(common_teamroster.get_data_frames()[0]))
             ix = teams.index(team)
             if ix % 5 == 0:
@@ -533,7 +655,7 @@ class dataHub:
             .clean_names()
             .with_columns(
                 [
-                    pl.col('num').replace('', None),
+                    pl.col('num').str.replace('', None),
                     pl.lit(self.cur_season).alias('season'),
                     pl.lit(None).cast(pl.Float64).alias('salary'),
                     pl.lit(None).cast(pl.Date).alias('movement_date'),
@@ -551,13 +673,18 @@ class dataHub:
         # df = df[~df.duplicated(keep = False)].reset_index(drop=True)
 
         # Write to database
-        df.to_pandas().to_sql('team_roster', self.db_con, schema='nba', index=False, if_exists='append')
+        df.to_pandas().to_sql(
+            'team_roster', self.db_con, schema='nba', index=False, if_exists='append'
+        )
         print('nba.team_roster has been updated\n\n')
 
     def _fty_con(self):
         """Create connection object to fanstasy api"""
 
-        df_leagues = pl.read_database(f"SELECT platform, league_id FROM fty.league WHERE season = '{self.cur_season}'", self.db_con)
+        df_leagues = pl.read_database(
+            f"SELECT platform, league_id FROM fty.league WHERE season = '{self.cur_season}'",
+            self.db_con,
+        )
 
         parser = configparser.ConfigParser()
         parser.read(os.getcwd() + '/database.ini')
@@ -571,175 +698,206 @@ class dataHub:
                 fty_creds['year'] = str(self.cur_season_year + 1)
 
                 fty_con['ESPN;' + str(row['league_id'])] = bb.League(
-                    league_id=int(fty_creds['league_id']), year=int(fty_creds['year']), espn_s2=fty_creds['espn_s2'], swid=fty_creds['swid']
+                    league_id=int(fty_creds['league_id']),
+                    year=int(fty_creds['year']),
+                    espn_s2=fty_creds['espn_s2'],
+                    swid=fty_creds['swid'],
                 )
 
             elif row['platform'] == 'Yahoo':
                 fty_creds['token_time'] = float(fty_creds['token_time'])
 
                 fty_con['Yahoo;' + str(row['league_id'])] = yfpy(
-                    league_id=fty_creds['league_id'], game_code='nba', yahoo_access_token_json=fty_creds
+                    league_id=fty_creds['league_id'],
+                    game_code='nba',
+                    yahoo_access_token_json=fty_creds,
                 )
 
                 # Set game_id attribute
                 fty_con['Yahoo;' + str(row['league_id'])].game_id = int(
-                    fty_con['Yahoo;' + str(row['league_id'])].get_league_key(self.cur_season_year)[0:3]
+                    fty_con['Yahoo;' + str(row['league_id'])].get_league_key(self.cur_season_year)[
+                        0:3
+                    ]
                 )
 
         return fty_con
 
-    # def fty_get_free_agents(self):
+    def fty_get_free_agents(self):
+        # Delete from database
+        db_ex = self.db_con.connect()
+        db_ex.execute(sqlalchemy.sql.text('TRUNCATE TABLE fty.free_agents'))
+        db_ex.commit()
 
-    #     # Delete from database
-    #     db_ex = self.db_con.connect()
-    #     db_ex.execute(sqlalchemy.sql.text("TRUNCATE TABLE fty.free_agents"))
-    #     db_ex.commit()
+        dfs = []
+        for con in self.fty_con:
+            print('\n--------------------- ' + con + ' fty.free_agents')
+            if con.startswith('ESPN'):
+                dfs.append(self._espn_get_free_agents(self.fty_con[con]))
+            elif con.startswith('Yahoo'):
+                dfs.append(self._yahoo_get_free_agents(self.fty_con[con]))
 
-    #     dfs = []
-    #     for con in self.fty_con:
-    #         print('\n--------------------- ' + con + ' fty.free_agents')
-    #         if con.startswith('ESPN'):
-    #             dfs.append(self._espn_get_free_agents(self.fty_con[con]))
-    #         elif con.startswith('Yahoo'):
-    #             dfs.append(self._yahoo_get_free_agents(self.fty_con[con]))
+        # Write to database
+        pl.concat(dfs).to_pandas().to_sql(
+            'free_agents', self.db_con, schema='fty', index=False, if_exists='append'
+        )
+        print('fty.free_agents has been updated\n\n')
 
-    #     # Write to database
-    #     concat(dfs, ignore_index=True).to_sql('free_agents', self.db_con, schema='fty', index=False, if_exists='append')
-    #     print('fty.free_agents has been updated\n\n')
+    def _espn_get_free_agents(self, espn_con):
+        dfs = []
+        for free_agent in espn_con.free_agents(size=1000):
+            dfs.append(
+                {
+                    'season': self.cur_season,
+                    'platform': 'ESPN',
+                    'league_id': espn_con.league_id,
+                    'timestamp': dt.datetime.now(zoneinfo.ZoneInfo('UTC')),
+                    'player_id': free_agent.playerId,
+                    'player_name': free_agent.name,
+                    'player_team': free_agent.proTeam.replace('PHL', 'PHI').replace('PHO', 'PHX'),
+                    'player_injury_status': None
+                    if len(free_agent.injuryStatus) == 0
+                    else free_agent.injuryStatus,
+                    'player_position': free_agent.position,
+                }
+            )
 
-    # def _espn_get_free_agents(self, espn_con):
+        return pl.DataFrame(dfs)
 
-    #     dfs = []
-    #     for free_agent in espn_con.free_agents(size=1000):
-    #         dfs.append({
-    #             'season': self.cur_season,
-    #             'platform': 'ESPN',
-    #             'league_id': espn_con.league_id,
-    #             'timestamp': dt.datetime.now(zoneinfo.ZoneInfo('UTC')),
-    #             'player_id': free_agent.playerId,
-    #             'player_name': free_agent.name,
-    #             'player_team': free_agent.proTeam.replace('PHL', 'PHI').replace('PHO', 'PHX'),
-    #             'player_injury_status': None if len(free_agent.injuryStatus) == 0 else free_agent.injuryStatus,
-    #             'player_position': free_agent.position
-    #         })
+    def _yahoo_get_free_agents(self, yahoo_con):
+        dfs = []
+        for player in yahoo_con.get_league_players():
+            p_ownership = yahoo_con.get_player_ownership(player.player_key)
+            if p_ownership.ownership.ownership_type in ['freeagents', 'waivers']:
+                dfs.append(
+                    {
+                        'season': self.cur_season,
+                        'platform': 'Yahoo',
+                        'league_id': yahoo_con.league_id,
+                        # 'timestamp': # insert afterwards
+                        'player_id': p_ownership.player_id,
+                        'player_name': p_ownership.name.full,
+                        'player_team': p_ownership.editorial_team_abbr,
+                        'player_injury_status': player.status,
+                        'player_position': p_ownership.display_position,
+                    }
+                )
+                time.sleep(1)
 
-    #     return DataFrame(dfs)
+        return (
+            pl.DataFrame(dfs)
+            .with_columns(pl.col('player_injury_status').str.replace('', 'ACTIVE'))
+            .insert_column(
+                4,
+                column=pl.Series(
+                    'timestamp', [dt.datetime.now(zoneinfo.ZoneInfo('UTC'))] * len(dfs)
+                ),
+            )
+        )
 
-    # def _yahoo_get_free_agents(self, yahoo_con):
+    def fty_get_league_competitor(self):
+        # Remove existing records from database (if any)
+        db_ex = self.db_con.connect()
+        db_ex.execute(
+            sqlalchemy.sql.text(
+                f"DELETE FROM fty.league_competitor WHERE season = '{self.cur_season}'"
+            )
+        )
+        db_ex.commit()
 
-    #     df = []
-    #     for player in yahoo_con.get_league_players():
-    #         p_ownership = yahoo_con.get_player_ownership(player.player_key)
-    #         if p_ownership.ownership.ownership_type in ['freeagents', 'waivers']:
-    #             df.append({
-    #                 'season': self.cur_season,
-    #                 'platform': 'Yahoo',
-    #                 'league_id': yahoo_con.league_id,
-    #                 # 'timestamp': # insert afterwards
-    #                 'player_id': p_ownership.player_id,
-    #                 'player_name': p_ownership.name.full,
-    #                 'player_team': p_ownership.editorial_team_abbr,
-    #                 'player_injury_status': player.status,
-    #                 'player_position': p_ownership.display_position
-    #             })
-    #             time.sleep(1)
+        dfs = []
+        for con in self.fty_con:
+            print('\n--------------------- ' + con + ' fty.league_competitor')
+            if con.startswith('ESPN'):
+                dfs.append(self._espn_get_league_competitor(self.fty_con[con]))
+            elif con.startswith('Yahoo'):
+                dfs.append(self._yahoo_get_league_competitor(self.fty_con[con]))
 
-    #     df = DataFrame(df)
-    #     df['player_injury_status'] = ['ACTIVE' if el == '' else el for el in df['player_injury_status']]
-    #     df.insert(3, 'timestamp', dt.datetime.now(zoneinfo.ZoneInfo('UTC')))
-    #     return df
+        # Write to database
+        pl.concat(dfs).to_pandas().to_sql(
+            'league_competitor', self.db_con, schema='fty', index=False, if_exists='append'
+        )
+        print('\nfty.league_competitor has been updated\n\n')
 
-    # def fty_get_league_competitor(self):
+    def _espn_get_league_competitor(self, espn_con):
+        dfs = []
+        for competitor in espn_con.teams:
+            dfs.append(
+                {
+                    'season': self.cur_season,
+                    'platform': 'ESPN',
+                    'league_id': espn_con.league_id,
+                    'competitor_id': competitor.team_id,
+                    'competitor_abbrev': competitor.team_abbrev,
+                    'competitor_name': competitor.team_name,
+                }
+            )
 
-    #     # Remove existing records from database (if any)
-    #     db_ex = self.db_con.connect()
-    #     db_ex.execute(sqlalchemy.sql.text(f"DELETE FROM fty.league_competitor WHERE season = '{self.cur_season}'"))
-    #     db_ex.commit()
+        return pl.DataFrame(dfs)
 
-    #     dfs = []
-    #     for con in self.fty_con:
-    #         print('\n--------------------- ' + con + ' fty.league_competitor')
-    #         if con.startswith('ESPN'):
-    #             dfs.append(self._espn_get_league_competitor(self.fty_con[con]))
-    #         elif con.startswith('Yahoo'):
-    #             dfs.append(self._yahoo_get_league_competitor(self.fty_con[con]))
+    def _yahoo_get_league_competitor(self, yahoo_con):
+        dfs = []
+        for competitor in yahoo_con.get_league_teams():
+            dfs.append(
+                {
+                    'season': self.cur_season,
+                    'platform': 'Yahoo',
+                    'league_id': yahoo_con.league_id,
+                    'competitor_id': competitor.team_id,
+                    'competitor_abbrev': competitor.managers[0].nickname,
+                    'competitor_name': competitor.name.decode(),
+                }
+            )
 
-    #     # Write to database
-    #     concat(dfs, ignore_index=True).to_sql('league_competitor', self.db_con, schema='fty', index=False, if_exists='append')
-    #     print('\nfty.league_competitor has been updated\n\n')
+        return pl.DataFrame(dfs)
 
-    # def _espn_get_league_competitor(self, espn_con):
+    def fty_get_league_matchup(self):
+        # Remove existing records from database (if any)
+        db_ex = self.db_con.connect()
+        db_ex.execute(
+            sqlalchemy.sql.text(
+                f"DELETE FROM fty.league_matchup WHERE season = '{self.cur_season}'"
+            )
+        )
+        db_ex.commit()
 
-    #     df = []
-    #     for competitor in espn_con.teams:
-    #         df.append({
-    #             'season': self.cur_season,
-    #             'platform': 'ESPN',
-    #             'league_id': espn_con.league_id,
-    #             'competitor_id': competitor.team_id,
-    #             'competitor_abbrev': competitor.team_abbrev,
-    #             'competitor_name': competitor.team_name
-    #         })
+        dfs = []
+        for con in self.fty_con:
+            print('\n--------------------- ' + con + ' fty.league_matchup')
+            if con.startswith('ESPN'):
+                dfs.append(self._espn_get_league_matchup(self.fty_con[con]))
+            elif con.startswith('Yahoo'):
+                dfs.append(self._yahoo_get_league_matchup(self.fty_con[con]))
 
-    #     return DataFrame(df)
+        # Write to database
+        pl.concat(dfs).to_pandas().to_sql(
+            'league_matchup', self.db_con, schema='fty', index=False, if_exists='append'
+        )
+        print('fty.league_matchup has been updated\n\n')
 
-    # def _yahoo_get_league_competitor(self, yahoo_con):
+    def _espn_get_league_matchup(self, espn_con):
+        dfs = []
+        for competitor in espn_con.teams:
+            for ix, opponent in enumerate(competitor.schedule):
+                dfs.append(
+                    {
+                        'season': self.cur_season,
+                        'platform': 'ESPN',
+                        'league_id': espn_con.league_id,
+                        'matchup_period': ix + 1,
+                        'competitor_id': competitor.team_id,
+                        'opponent_id': opponent.home_team.team_id
+                        if competitor.team_id == opponent.away_team.team_id
+                        else opponent.away_team.team_id,
+                    }
+                )
 
-    #     df = []
-    #     for competitor in yahoo_con.get_league_teams():
-
-    #         df.append({
-    #             'season': self.cur_season,
-    #             'platform': 'Yahoo',
-    #             'league_id': yahoo_con.league_id,
-    #             'competitor_id': competitor.team_id,
-    #             'competitor_abbrev': competitor.managers[0].nickname,
-    #             'competitor_name': competitor.name.decode()
-    #         })
-
-    #     return DataFrame(df)
-
-    # # NEW: TEST
-    # def fty_get_league_matchup(self):
-
-    #     # Remove existing records from database (if any)
-    #     db_ex = self.db_con.connect()
-    #     db_ex.execute(sqlalchemy.sql.text(f"DELETE FROM fty.league_matchup WHERE season = '{self.cur_season}'"))
-    #     db_ex.commit()
-
-    #     dfs = []
-    #     for con in self.fty_con:
-    #         print('\n--------------------- ' + con + ' fty.league_matchup')
-    #         if con.startswith('ESPN'):
-    #             dfs.append(self._espn_get_league_matchup(self.fty_con[con]))
-    #         elif con.startswith('Yahoo'):
-    #             dfs.append(self._yahoo_get_league_matchup(self.fty_con[con]))
-
-    #     # Write to database
-    #     concat(dfs, ignore_index=True).to_sql('league_matchup', self.db_con, schema='fty', index=False, if_exists='append')
-    #     print('fty.league_matchup has been updated\n\n')
-
-    # def _espn_get_league_matchup(self, espn_con):
-
-    #     lg_mup = []
-    #     for competitor in espn_con.teams:
-    #         for ix, opponent in enumerate(competitor.schedule):
-    #             lg_mup.append({
-    #                 'season': self.cur_season,
-    #                 'platform': 'ESPN',
-    #                 'league_id': espn_con.league_id,
-    #                 'matchup_period': ix + 1,
-    #                 'competitor_id': competitor.team_id,
-    #                 'opponent_id': opponent.home_team.team_id if competitor.team_id == opponent.away_team.team_id else opponent.away_team.team_id
-    #             })
-
-    #     return DataFrame(lg_mup).sort_values(['matchup_period', 'competitor_id'])
+        return pl.DataFrame(dfs)
 
     # def _yahoo_get_league_matchup(self, yahoo_con):
     #     # YET TO IMPLEMENT
     #     pass
 
-    # # NEW: TEST
+    # # THIS DOESN'T WORK
     # def fty_get_league_matchup_dates(self):
 
     #     # THIS DOESN'T WORK FOR FUTURE DATES
@@ -806,127 +964,145 @@ class dataHub:
     #     # YET TO IMPLEMENT
     #     pass
 
-    # def fty_get_competitor_roster(self):
+    def fty_get_competitor_roster(self):
+        # Schedule NZT:
+        # 3am
+        # 8am - delete 3am records
+        # 11am - delete 8am records
+        # 1pm - delete 11am records
+        # 3pm - delete 1pm records
+        # 5pm - don't delete records, assign to next day
+        # 8pm - delete 5pm records, assign to next day
+        # 11pm - 'delete 8pm records, assign to next day
+        col_order = pl.read_database(
+            "SELECT * FROM util.table_column_order WHERE table_name = 'competitor_roster'",
+            self.db_con,
+        )
+        assigned_date = dt.datetime.now(zoneinfo.ZoneInfo('America/New_York')).date()
+        df_mup = pl.read_database(
+            f"SELECT * FROM fty.league_matchup_date WHERE '{assigned_date}' BETWEEN matchup_start AND matchup_end ORDER BY table_column_order",
+            self.db_con,
+        )
 
-    #     # Schedule NZT:
-    #         # 3am
-    #         # 8am - delete 3am records
-    #         # 11am - delete 8am records
-    #         # 1pm - delete 11am records
-    #         # 3pm - delete 1pm records
-    #         # 5pm - don't delete records, assign to next day
-    #         # 8pm - delete 5pm records, assign to next day
-    #         # 11pm - 'delete 8pm records, assign to next day
-    #     assigned_date = dt.datetime.now(zoneinfo.ZoneInfo('Pacific/Auckland')).date() - dt.timedelta(days=1) if dt.datetime.now(zoneinfo.ZoneInfo('Pacific/Auckland')).hour < 17 else dt.datetime.now(zoneinfo.ZoneInfo('Pacific/Auckland')).date()
+        # Remove existing records from database (if any)
+        db_ex = self.db_con.connect()
+        db_ex.execute(
+            sqlalchemy.sql.text(
+                f"DELETE FROM fty.competitor_roster WHERE assigned_date = '{assigned_date}'"
+            )
+        )
+        db_ex.commit()
 
-    #     # Remove existing records from database (if any)
-    #     db_ex = self.db_con.connect()
-    #     db_ex.execute(sqlalchemy.sql.text(f"DELETE FROM fty.competitor_roster WHERE assigned_date = '{assigned_date}'"))
-    #     db_ex.commit()
+        dfs = []
+        for con in self.fty_con:
+            print('\n--------------------- ' + con + ' fty.competitor_roster')
+            if con.startswith('ESPN'):
+                dfs.append(self._espn_get_competitor_roster(self.fty_con[con]))
+            elif con.startswith('Yahoo'):
+                dfs.append(self._yahoo_get_competitor_roster(self.fty_con[con]))
 
-    #     dfs = []
-    #     for con in self.fty_con:
-    #         print('\n--------------------- ' + con + ' fty.competitor_roster')
-    #         if con.startswith('ESPN'):
-    #             dfs.append(self._espn_get_competitor_roster(self.fty_con[con]))
-    #         elif con.startswith('Yahoo'):
-    #             dfs.append(self._yahoo_get_competitor_roster(self.fty_con[con]))
+        df = (
+            pl.concat(dfs)
+            .with_columns(pl.lit(assigned_date).alias('assigned_date'))
+            .join(df_mup, on=['platform', 'league_id'], how='left')
+            .select(col_order)
+        )
 
-    #     # Assigned date manipulation
-    #     df = concat(dfs)
-    #     df['assigned_date'] = assigned_date
-    #     df.insert(df.columns.get_loc('timestamp') + 1, 'assigned_date', df.pop('assigned_date'))
+        # Write to database
+        df.to_pandas().to_sql(
+            'competitor_roster', self.db_con, schema='fty', index=False, if_exists='append'
+        )
+        print('fty.competitor_roster has been updated\n\n')
 
-    #     # Matchup_period manipulation: if Sunday and greater than 5pm
-    #     # THIS APPROACH DOESN'T HANDLE FOR 2 WEEK MATCHUPS....FIX IT LATER
-    #     cond = (dt.datetime.now(zoneinfo.ZoneInfo('Pacific/Auckland')).weekday() == 6) & (dt.datetime.now(zoneinfo.ZoneInfo('Pacific/Auckland')).hour >= 17)
-    #     df['matchup_period'] = df['matchup_period'] + int(cond)
+    def _espn_get_competitor_roster(self, espn_con):
+        dfs = []
+        for competitor in espn_con.teams:
+            for player in competitor.roster:
+                dfs.append(
+                    {
+                        'season': self.cur_season,
+                        'platform': 'ESPN',
+                        'league_id': espn_con.league_id,
+                        'timestamp': dt.datetime.now(zoneinfo.ZoneInfo('UTC')),
+                        'matchup_period': espn_con.currentMatchupPeriod,
+                        'competitor_id': competitor.team_id,
+                        'player_fantasy_id': player.playerId,
+                        'player_name': player.name,
+                        'player_team': player.proTeam.replace('PHL', 'PHI').replace('PHO', 'PHX'),
+                        'player_injury_status': player.injuryStatus,
+                        'player_acquisition_type': player.acquisitionType,
+                    }
+                )
 
-    #     # Write to database
-    #     df.to_sql('competitor_roster', self.db_con, schema='fty', index=False, if_exists='append')
-    #     print('fty.competitor_roster has been updated\n\n')
+        return pl.DataFrame(dfs)
 
-    # def _espn_get_competitor_roster(self, espn_con):
+    def _yahoo_get_competitor_roster(self, yahoo_con):
+        dfs = []
+        for team_id in [team.team_id for team in yahoo_con.get_league_teams()]:
+            for player in yahoo_con.get_team_roster_by_week(team_id).clean_data_dict()['players']:
+                if player['player'].selected_position.position is not None:
+                    dfs.append(
+                        {
+                            'season': self.cur_season,
+                            'platform': 'Yahoo',
+                            'league_id': yahoo_con.league_id,
+                            'matchup_period': yahoo_con.get_league_info().current_week,
+                            'competitor_id': team_id,
+                            'player_fantasy_id': player['player'].player_id,
+                            'player_name': player['player'].name.full,
+                            'player_team': player['player'].editorial_team_abbr,
+                            'player_injury_status': player['player'].status,
+                            'player_acquisition_type': None,
+                        }
+                    )
 
-    #     dfs = []
-    #     for competitor in espn_con.teams:
-    #         for player in competitor.roster:
-    #             dfs.append({
-    #                 'season': self.cur_season,
-    #                 'platform': 'ESPN',
-    #                 'league_id': espn_con.league_id,
-    #                 'timestamp': dt.datetime.now(zoneinfo.ZoneInfo('UTC')),
-    #                 'matchup_period': espn_con.currentMatchupPeriod,
-    #                 'competitor_id': competitor.team_id,
-    #                 'player_fantasy_id': player.playerId,
-    #                 'player_name': player.name,
-    #                 'player_team': player.proTeam.replace('PHL', 'PHI').replace('PHO', 'PHX'),
-    #                 'player_injury_status': player.injuryStatus,
-    #                 'player_acquisition_type': player.acquisitionType
-    #             })
+        return (
+            pl.DataFrame(dfs)
+            .with_columns(pl.col('player_injury_status').str.replace('', 'ACTIVE'))
+            .insert_column(
+                4,
+                column=pl.Series(
+                    'timestamp', [dt.datetime.now(zoneinfo.ZoneInfo('UTC'))] * len(dfs)
+                ),
+            )
+        )
 
-    #     return DataFrame(dfs)
+    def fty_get_recent_activity(self):
+        dfs = []
+        for con in self.fty_con:
+            print('\n--------------------- ' + con + ' fty.recent_activity')
+            if con.startswith('ESPN'):
+                dfs.append(self._espn_get_recent_activity(self.fty_con[con]))
+            elif con.startswith('Yahoo'):
+                dfs.append(self._yahoo_get_recent_activity(self.fty_con[con]))
 
-    # def _yahoo_get_competitor_roster(self, yahoo_con):
+        # Write to database
+        pl.concat(dfs).to_pandas().to_sql(
+            'recent_activity', self.db_con, schema='fty', index=False, if_exists='append'
+        )
+        print('fty.recent_activity has been updated\n\n')
 
-    #     df = []
-    #     for team_id in [team.team_id for team in yahoo_con.get_league_teams()]:
-    #         for player in yahoo_con.get_team_roster_by_week(team_id).clean_data_dict()['players']:
-    #             if player['player'].selected_position.position != None:
-    #                 df.append({
-    #                     'season': self.cur_season,
-    #                     'platform': 'Yahoo',
-    #                     'league_id': yahoo_con.league_id,
-    #                     'matchup_period': yahoo_con.get_league_info().current_week,
-    #                     'competitor_id': team_id,
-    #                     'player_fantasy_id': player['player'].player_id,
-    #                     'player_name': player['player'].name.full,
-    #                     'player_team': player['player'].editorial_team_abbr,
-    #                     'player_injury_status': player['player'].status,
-    #                     'player_acquisition_type': None
-    #                 })
+    def _espn_get_recent_activity(self, espn_con):
+        dfs = []
+        for activity in espn_con.recent_activity(size=50):
+            for action in activity.actions:
+                dfs.append(
+                    {
+                        'season': self.cur_season,
+                        'platform': 'ESPN',
+                        'league_id': espn_con.league_id,
+                        'timestamp': dt.fromtimestamp(activity.date / 1000),
+                        'competitor_id': action[0].team_id,
+                        'action': action[1],
+                        'player': action[2],
+                    }
+                )
 
-    #     df = DataFrame(df)
-    #     df['player_injury_status'] = ['ACTIVE' if el == '' else el for el in df['player_injury_status']]
-    #     # df.insert(3, 'timestamp', dt.datetime.now(zoneinfo.Zoneinfo('UTC')))
-    #     return df
-
-    # def fty_get_recent_activity(self):
-
-    #     dfs = []
-    #     for con in self.fty_con:
-    #         print('\n--------------------- ' + con + ' fty.recent_activity')
-    #         if con.startswith('ESPN'):
-    #             dfs.append(self._espn_get_recent_activity(self.fty_con[con]))
-    #         elif con.startswith('Yahoo'):
-    #             dfs.append(self._yahoo_get_recent_activity(self.fty_con[con]))
-
-    #     # Write to database
-    #     concat(dfs, ignore_index=True).to_sql('recent_activity', self.db_con, schema='fty', index=False, if_exists='append')
-    #     print('fty.recent_activity has been updated\n\n')
-
-    # def _espn_get_recent_activity(self, espn_con):
-
-    #     df = []
-    #     for activity in espn_con.recent_activity(size=50):
-    #         for action in activity.actions:
-    #             df.append({
-    #                 'season': self.cur_season,
-    #                 'platform': 'ESPN',
-    #                 'league_id': espn_con.league_id,
-    #                 'timestamp': dt.fromtimestamp(activity.date / 1000),
-    #                 'competitor_id': action[0].team_id,
-    #                 'action': action[1],
-    #                 'player': action[2]
-    #             })
-
-    #     df_t = read_sql(f"SELECT * FROM fty.recent_activity WHERE season = '{self.cur_season}' AND platform = 'ESPN' AND league_id = {espn_con.league_id}", self.db_con)
-    #     return (
-    #         DataFrame(df)
-    #         .merge(df_t, how='left', indicator=True)
-    #         .query('_merge == "left_only"')
-    #         .drop('_merge', axis=1)
-    #     )
+        df_already_done = pl.read_database(
+            f"SELECT * FROM fty.recent_activity WHERE season = '{self.cur_season}' AND platform = 'ESPN' AND league_id = {espn_con.league_id}",
+            self.db_con,
+        )
+        return pl.DataFrame(dfs).join(df_already_done, on=df_already_done.columns, how='anti')
 
     # def _yahoo_get_recent_activity(self, yahoo_con):
 

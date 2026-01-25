@@ -13,48 +13,52 @@ import nba_api.stats.endpoints as nba_ep
 dh = dataHub('postgre')
 
 
-# get_team_roster(self):
+# def fty_get_competitor_roster(self):
 
+# Schedule NZT:
+# 3am
+# 8am - delete 3am records
+# 11am - delete 8am records
+# 1pm - delete 11am records
+# 3pm - delete 1pm records
+# 5pm - don't delete records, assign to next day
+# 8pm - delete 5pm records, assign to next day
+# 11pm - 'delete 8pm records, assign to next day
 col_order = pl.read_database(
-    "SELECT column_name FROM util.table_column_order WHERE table_name = 'team_roster' ORDER BY column_order",
-    dh.db_con,
-)['column_name'].to_list()
-teams = dh.nba_teams['id'].to_list()
+    "SELECT * FROM util.table_column_order WHERE table_name = 'competitor_roster'", self.db_con
+)
+assigned_date = dt.datetime.now(zoneinfo.ZoneInfo('America/New_York')).date()
+df_mup = pl.read_database(
+    f"SELECT * FROM fty.league_matchup_date WHERE '{assigned_date}' BETWEEN matchup_start AND matchup_end ORDER BY table_column_order",
+    self.db_con,
+)
 
-print('\n--------------------- nba.team_roster')
+# Remove existing records from database (if any)
+db_ex = self.db_con.connect()
+db_ex.execute(
+    sqlalchemy.sql.text(
+        f"DELETE FROM fty.competitor_roster WHERE assigned_date = '{assigned_date}'"
+    )
+)
+db_ex.commit()
+
 dfs = []
-
-for team in teams[0:3]:
-    common_teamroster = nba_ep.commonteamroster.CommonTeamRoster(season=dh.cur_season_year, team_id=team)
-    dfs.append(pl.from_pandas(common_teamroster.get_data_frames()[0]))
-    ix = teams.index(team)
-    if ix % 5 == 0:
-        print('team:', ix, '/', len(teams))
-    time.sleep(1)
-print('team:', ix, '/', len(teams))
+for con in self.fty_con:
+    print('\n--------------------- ' + con + ' fty.competitor_roster')
+    if con.startswith('ESPN'):
+        dfs.append(self._espn_get_competitor_roster(self.fty_con[con]))
+    elif con.startswith('Yahoo'):
+        dfs.append(self._yahoo_get_competitor_roster(self.fty_con[con]))
 
 df = (
     pl.concat(dfs)
-    .clean_names()
-    .with_columns(
-        [
-            pl.col('num').replace('', None),
-            pl.lit(dh.cur_season).alias('season'),
-            pl.lit(None).cast(pl.Float64).alias('salary'),
-            pl.lit(None).cast(pl.Date).alias('movement_date'),
-        ]
-    )
-    .join(dh.nba_teams, left_on='teamid', right_on='id', how='left')
-    .rename({'teamid': 'team_id', 'abbreviation': 'team_slug'})
+    .with_columns(pl.lit(assigned_date).alias('assigned_date'))
+    .join(df_mup, on=['platform', 'league_id'], how='left')
     .select(col_order)
 )
 
-# CONTROL FOR PLAYERS BEING TRADED
-# df_t = read_sql(f"SELECT * FROM nba.team_roster WHERE season = '{self.cur_season}'", db_con)
-# df_t = df_t.drop('salary', axis='columns')
-# df = concat([df, df_t])
-# df = df[~df.duplicated(keep = False)].reset_index(drop=True)
-
 # Write to database
-df.to_pandas().to_sql('team_roster', dh.db_con, schema='nba', index=False, if_exists='append')
-print('nba.team_roster has been updated\n\n')
+df.to_pandas().to_sql(
+    'competitor_roster', self.db_con, schema='fty', index=False, if_exists='append'
+)
+print('fty.competitor_roster has been updated\n\n')
