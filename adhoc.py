@@ -2,70 +2,59 @@ from polars_conversion import dataHub
 import polars as pl
 import polars.selectors as cs
 import janitor.polars
-import dateutil
 import datetime as dt
 import zoneinfo
 import time
 import sqlalchemy
+import requests
+import dateutil
 import nba_api.stats.endpoints as nba_ep
-
-
 
 dh = dataHub('postgre')
 
 
-col_order = (
-    pl.read_database(
-        "SELECT column_name FROM util.table_column_order WHERE table_name = 'league_game_schedule' ORDER BY column_order", 
-        dh.db_con
-    )
-    .get_column('column_name')
-    .to_list()
-)
+# get_team_roster(self):
 
-season = dh.cur_season_year
-# if season == 'current':
-#     season = self.cur_season_year
-# else:
-#     season = self.prev_season_year
+col_order = pl.read_database(
+    "SELECT column_name FROM util.table_column_order WHERE table_name = 'team_roster' ORDER BY column_order",
+    dh.db_con,
+)['column_name'].to_list()
+teams = dh.nba_teams['id'].to_list()
 
-print('\n--------------------- nba.historical_league_game_schedule')
-dfs = [] 
-for type_season in ['Regular Season', 'Pre Season', 'Playoffs', 'All Star']:
-    hist_game_schedule = nba_ep.leaguegamelog.LeagueGameLog(season_type_all_star=type_season, season=season)
-    dfs.append((
-        pl.from_pandas(hist_game_schedule.get_data_frames()[0])
-        .with_columns(pl.lit(type_season).alias('season_type'))
-    ))
+print('\n--------------------- nba.team_roster')
+dfs = []
+
+for team in teams[0:3]:
+    common_teamroster = nba_ep.commonteamroster.CommonTeamRoster(season=dh.cur_season_year, team_id=team)
+    dfs.append(pl.from_pandas(common_teamroster.get_data_frames()[0]))
+    ix = teams.index(team)
+    if ix % 5 == 0:
+        print('team:', ix, '/', len(teams))
     time.sleep(1)
+print('team:', ix, '/', len(teams))
 
 df = (
     pl.concat(dfs)
     .clean_names()
-    .with_columns([
-        pl.col('game_id').cast(pl.Float64),
-        pl.col('game_date').str.to_date(),
-        pl.lit(f'{season}-{str(season+1)[-2:]}').alias('season'),
-        pl.col('matchup').str.replace_all(r' @ | vs\.? ', '-').alias('opponent')
-    ])
-    .with_columns(pl.col('opponent').str.split('-'))
     .with_columns(
-        pl.when(pl.col('team_abbreviation') == pl.col('opponent').list.get(0))
-        .then(pl.col('opponent').list.get(1))
-        .otherwise(pl.col('opponent').list.get(0))
-        .alias('opponent')
+        [
+            pl.col('num').replace('', None),
+            pl.lit(dh.cur_season).alias('season'),
+            pl.lit(None).cast(pl.Float64).alias('salary'),
+            pl.lit(None).cast(pl.Date).alias('movement_date'),
+        ]
     )
-    .with_columns([
-        pl.when(pl.col('wl') == 'W').then(pl.col('team_abbreviation')).otherwise(pl.col('opponent')).alias('team_winner'),
-        pl.when(pl.col('wl') == 'L').then(pl.col('team_abbreviation')).otherwise(pl.col('opponent')).alias('team_loser')
-    ])
+    .join(dh.nba_teams, left_on='teamid', right_on='id', how='left')
+    .rename({'teamid': 'team_id', 'abbreviation': 'team_slug'})
     .select(col_order)
 )
 
+# CONTROL FOR PLAYERS BEING TRADED
+# df_t = read_sql(f"SELECT * FROM nba.team_roster WHERE season = '{self.cur_season}'", db_con)
+# df_t = df_t.drop('salary', axis='columns')
+# df = concat([df, df_t])
+# df = df[~df.duplicated(keep = False)].reset_index(drop=True)
 
-db_ex = self.db_con.connect()
-db_ex.execute(sqlalchemy.sql.text(f"DELETE FROM nba.league_game_schedule WHERE season = '{season}-{str(season+1)[-2:]}'"))
-db_ex.commit()
-
-df.to_pandas().to_sql('league_game_schedule', self.db_con, schema='nba', index=False, if_exists='append')
-print('nba.historical_game_schedule has been updated\n\n')
+# Write to database
+df.to_pandas().to_sql('team_roster', dh.db_con, schema='nba', index=False, if_exists='append')
+print('nba.team_roster has been updated\n\n')
