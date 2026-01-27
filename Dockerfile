@@ -1,22 +1,34 @@
-ARG PYTHON_VERSION=3.11.3
-FROM python:${PYTHON_VERSION} as base
+# Use an official Python runtime as a parent image
+FROM python:3.11-slim
+
+# Set environment variables
+ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
+# Install system dependencies
+# 1. default-jre is required for tabula-py (Java)
+# 2. build-essential and gcc for sqlalchemy/pandas if needed
+# 3. libgomp1 is often needed for high-performance Polars operations
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    tzdata \
+    default-jre \
+    build-essential \
+    gcc \
+    libgomp1 \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set the working directory in the container
 WORKDIR /app
 
-# Download dependencies as a separate step to take advantage of Docker's caching.
-RUN --mount=type=cache,target=/root/.cache/pip \
-    --mount=type=bind,source=requirements.txt,target=requirements.txt \
-    apt-get update \
-#    && apt-get upgrade \
-    && apt-get -y install libpq-dev libpq5 python3-psycopg2 libopenblas-dev libhdf5-dev libhdf5-serial-dev libatlas-base-dev gcc \
-    && pip install --upgrade pip \
-#    && pip install psycopg2 \
-    && python -m pip install -r requirements.txt \
-    && curl --create-dirs -o $HOME/.postgresql/root.crt 'https://cockroachlabs.cloud/clusters/11af18b7-ef5e-41b2-b3b7-5db438b1d403/cert'
+# Install Python dependencies
+# We use a single RUN command to keep the image layer count low
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the source code into the container.
+# Copy the rest of your application code
 COPY . .
 
-# Run the application.
-ENTRYPOINT ["python3", "."]
+# Command to run your script (assuming your main script is main.py)
+# ENTRYPOINT allows you to pass arguments like 'argv' easily
+ENTRYPOINT ["python", "."]
+
