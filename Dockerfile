@@ -21,6 +21,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Set the working directory in the container
 WORKDIR /app
 
+# 1. Copy the requirements file from your Mac to the container
+COPY requirements.txt .
+
 # Install Python dependencies
 # We use a single RUN command to keep the image layer count low
 RUN pip install --no-cache-dir -r requirements.txt
