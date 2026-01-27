@@ -1,29 +1,21 @@
 import configparser
-import snakecase
-import re
 import os
 import requests
 import tabula
 import bs4
-import unicodedata
 import sqlalchemy
 import time
 import zoneinfo
 import dateutil
-import janitor
 import datetime as dt
-import numpy as np
 import polars as pl
+import janitor.polars
 import polars.selectors as cs
 import nba_api.stats.endpoints as nba_ep
 from nba_api.stats.static import teams, players
 import nba_api.stats.library.parameters as nba_parameters
 import espn_api.basketball as bb
 from yfpy.query import YahooFantasySportsQuery as yfpy
-
-from pandasql import sqldf
-
-pysqldf = lambda q: sqldf(q, locals())
 
 
 # Constants
@@ -64,7 +56,7 @@ class dataHub:
             "SELECT column_name FROM util.table_column_order WHERE table_name = 'player_season_stats' ORDER BY column_order",
             self.db_con,
         )['column_name'].to_list()
-        ls_pl = self.active_players['id'].to_list()  # [480:571]
+        ls_pl = self.active_players['id'].to_list()[480:571]
 
         print('\n--------------------- nba.player_season_stats')
         dfs = []
@@ -88,17 +80,18 @@ class dataHub:
         )
 
         # Write to database
-        df.to_pandas().to_sql(
-            'player_season_stats', self.db_con, schema='nba', index=False, if_exists='append'
-        )
+        # df.to_pandas().to_sql(
+        #     'player_season_stats', self.db_con, schema='nba', index=False, if_exists='append'
+        # )
         print('nba.player_season_stats has been updated\n\n')
+        return df
 
     def get_player_info(self):
         col_order = pl.read_database(
             "SELECT column_name FROM util.table_column_order WHERE table_name = 'player_info' ORDER BY column_order",
             self.db_con,
         )['column_name'].to_list()
-        ls_pl = self.active_players['id'].to_list()  # [550:615]
+        ls_pl = self.active_players['id'].to_list()[550:615]
 
         print('\n--------------------- nba.player_info')
         dfs = []
@@ -116,14 +109,20 @@ class dataHub:
         df = (
             pl.concat(dfs)
             .clean_names()
-            .with_columns(pl.col('height').str.split_exact('-', n=1).cast(pl.Float64))
+            .with_columns(pl.col('height').str.split('-'))
             .with_columns(
                 [
                     pl.lit(self.cur_season).alias('season'),
                     (pl.col('weight').cast(pl.Float64, strict=False) / 2.2046)
                     .round(3)
                     .alias('weight_kg'),
-                    ((pl.col('height').list.get(0) * 12 + pl.col('height').list.get(1)) * 2.54)
+                    (
+                        (
+                            pl.col('height').list.get(0).cast(pl.Float64) * 12
+                            + pl.col('height').list.get(1).cast(pl.Float64)
+                        )
+                        * 2.54
+                    )
                     .round(2)
                     .alias('height_cm'),
                 ]
@@ -133,10 +132,11 @@ class dataHub:
         )
 
         # Write to database
-        df.to_pandas().to_sql(
-            'player_info', self.db_con, schema='nba', index=False, if_exists='append'
-        )
+        # df.to_pandas().to_sql(
+        #     'player_info', self.db_con, schema='nba', index=False, if_exists='append'
+        # )
         print('nba.player_info has been updated\n\n')
+        return df
 
     def get_team_injuries(self):
         col_order = pl.read_database(
@@ -191,12 +191,13 @@ class dataHub:
             f"SELECT game_date, game_id, matchup FROM nba.league_game_schedule WHERE game_date BETWEEN '{cur_date}' AND '{cur_date + dt.timedelta(days=2)}'",
             self.db_con,
         )
+
         game_ids = pl.concat(
             [
                 game_ids.with_columns(pl.col('matchup').str.replace(' vs. ', '@')),
                 (
                     game_ids.with_columns(
-                        pl.col('matchup').str.split_exact(' vs. ', n=1)
+                        pl.col('matchup').str.split(' vs. ').alias('matchup')
                     ).with_columns(
                         (pl.col('matchup').list.get(1) + '@' + pl.col('matchup').list.get(0)).alias(
                             'matchup'
@@ -314,7 +315,7 @@ class dataHub:
                 ]
             )
             # Clean up
-            .with_columns(pl.col('Player Name').str.split_exact(', ', n=1))
+            .with_columns(pl.col('Player Name').str.split(', '))
             .with_columns(
                 [
                     pl.col('Game Date').str.to_date(format='%m/%d/%Y'),
@@ -359,10 +360,11 @@ class dataHub:
         db_ex.commit()
 
         # Write to database
-        df.to_pandas().to_sql(
-            'injuries', self.db_con, schema='nba', index=False, if_exists='append'
-        )
+        # df.to_pandas().to_sql(
+        #     'injuries', self.db_con, schema='nba', index=False, if_exists='append'
+        # )
         print('nba.injuries has been updated\n\n')
+        return df
 
     def get_box_score(self):
         bs_max_dt = (
@@ -467,7 +469,9 @@ class dataHub:
                     .with_columns(
                         [pl.col('min').str.replace('', None), pl.col('game_id').cast(pl.Int64)]
                     )
-                    .with_columns(pl.col('min').str.replace(r':.*', '').cast(pl.Int64))
+                    .with_columns(
+                        pl.col('min').str.replace(r':.*', '').cast(pl.Int64, strict=False)
+                    )
                 )
 
                 if el == 0:
@@ -491,12 +495,12 @@ class dataHub:
                 df = df.unique().select(bst_col_order)
                 dfs.append(df)
 
-            dfs[0].to_pandas().to_sql(
-                'player_box_score', self.db_con, schema='nba', index=False, if_exists='append'
-            )
-            dfs[1].to_pandas().to_sql(
-                'team_box_score', self.db_con, schema='nba', index=False, if_exists='append'
-            )
+            # dfs[0].to_pandas().to_sql(
+            #     'player_box_score', self.db_con, schema='nba', index=False, if_exists='append'
+            # )
+            # dfs[1].to_pandas().to_sql(
+            #     'team_box_score', self.db_con, schema='nba', index=False, if_exists='append'
+            # )
 
         print('nba.player/team_box_score have been updated\n\n')
 
@@ -527,11 +531,11 @@ class dataHub:
             time.sleep(1)
 
         df = (
-            pl.concat(dfs)
+            pl.concat([df for df in dfs if len(df) > 0])
             .clean_names()
             .with_columns(
                 [
-                    pl.col('game_id').cast(pl.Float64),
+                    pl.col('game_id').cast(pl.Int64),
                     pl.col('game_date').str.to_date(),
                     pl.lit(f'{season}-{str(season + 1)[-2:]}').alias('season'),
                     pl.col('matchup').str.replace_all(r' @ | vs\.? ', '-').alias('opponent'),
@@ -567,10 +571,11 @@ class dataHub:
         )
         db_ex.commit()
 
-        df.to_pandas().to_sql(
-            'league_game_schedule', self.db_con, schema='nba', index=False, if_exists='append'
-        )
+        # df.to_pandas().to_sql(
+        #     'league_game_schedule', self.db_con, schema='nba', index=False, if_exists='append'
+        # )
         print('nba.historical_game_schedule has been updated\n\n')
+        return df
 
     def get_next_game_schedule(self):
         request = requests.get('https://cdn.nba.com/static/json/staticData/scheduleLeagueV2_1.json')
@@ -625,10 +630,11 @@ class dataHub:
         # Need to consider when IN-Season tourney games / All star games are added to schedule
 
         # Write to database
-        df.to_pandas().to_sql(
-            'league_game_schedule', self.db_con, schema='nba', index=False, if_exists='append'
-        )
+        # df.to_pandas().to_sql(
+        #     'league_game_schedule', self.db_con, schema='nba', index=False, if_exists='append'
+        # )
         print('nba.current_game_schedule has been updated\n\n')
+        return df
 
     def get_team_roster(self):
         col_order = pl.read_database(
@@ -673,10 +679,11 @@ class dataHub:
         # df = df[~df.duplicated(keep = False)].reset_index(drop=True)
 
         # Write to database
-        df.to_pandas().to_sql(
-            'team_roster', self.db_con, schema='nba', index=False, if_exists='append'
-        )
+        # df.to_pandas().to_sql(
+        #     'team_roster', self.db_con, schema='nba', index=False, if_exists='append'
+        # )
         print('nba.team_roster has been updated\n\n')
+        return df
 
     def _fty_con(self):
         """Create connection object to fanstasy api"""
@@ -813,9 +820,9 @@ class dataHub:
                 dfs.append(self._yahoo_get_league_competitor(self.fty_con[con]))
 
         # Write to database
-        pl.concat(dfs).to_pandas().to_sql(
-            'league_competitor', self.db_con, schema='fty', index=False, if_exists='append'
-        )
+        # pl.concat(dfs).to_pandas().to_sql(
+        #     'league_competitor', self.db_con, schema='fty', index=False, if_exists='append'
+        # )
         print('\nfty.league_competitor has been updated\n\n')
 
     def _espn_get_league_competitor(self, espn_con):
@@ -869,10 +876,11 @@ class dataHub:
                 dfs.append(self._yahoo_get_league_matchup(self.fty_con[con]))
 
         # Write to database
-        pl.concat(dfs).to_pandas().to_sql(
-            'league_matchup', self.db_con, schema='fty', index=False, if_exists='append'
-        )
+        # pl.concat(dfs).to_pandas().to_sql(
+        #     'league_matchup', self.db_con, schema='fty', index=False, if_exists='append'
+        # )
         print('fty.league_matchup has been updated\n\n')
+        return pl.concat(dfs)
 
     def _espn_get_league_matchup(self, espn_con):
         dfs = []
@@ -975,12 +983,12 @@ class dataHub:
         # 8pm - delete 5pm records, assign to next day
         # 11pm - 'delete 8pm records, assign to next day
         col_order = pl.read_database(
-            "SELECT * FROM util.table_column_order WHERE table_name = 'competitor_roster'",
+            "SELECT * FROM util.table_column_order WHERE table_name = 'competitor_roster' ORDER BY table_column_order",
             self.db_con,
-        )
+        )['column_name'].to_list()
         assigned_date = dt.datetime.now(zoneinfo.ZoneInfo('America/New_York')).date()
         df_mup = pl.read_database(
-            f"SELECT * FROM fty.league_matchup_date WHERE '{assigned_date}' BETWEEN matchup_start AND matchup_end ORDER BY table_column_order",
+            f"SELECT * FROM fty.league_matchup_dates WHERE '{assigned_date}' BETWEEN matchup_start AND matchup_end",
             self.db_con,
         )
 
@@ -1009,10 +1017,11 @@ class dataHub:
         )
 
         # Write to database
-        df.to_pandas().to_sql(
-            'competitor_roster', self.db_con, schema='fty', index=False, if_exists='append'
-        )
+        # df.to_pandas().to_sql(
+        #     'competitor_roster', self.db_con, schema='fty', index=False, if_exists='append'
+        # )
         print('fty.competitor_roster has been updated\n\n')
+        return df
 
     def _espn_get_competitor_roster(self, espn_con):
         dfs = []
@@ -1091,7 +1100,9 @@ class dataHub:
                         'season': self.cur_season,
                         'platform': 'ESPN',
                         'league_id': espn_con.league_id,
-                        'timestamp': dt.fromtimestamp(activity.date / 1000),
+                        'timestamp': dt.datetime.fromtimestamp(
+                            activity.date / 1000, tz=dt.timezone.utc
+                        ),
                         'competitor_id': action[0].team_id,
                         'action': action[1],
                         'player': action[2],
@@ -1104,145 +1115,171 @@ class dataHub:
         )
         return pl.DataFrame(dfs).join(df_already_done, on=df_already_done.columns, how='anti')
 
-    # def _yahoo_get_recent_activity(self, yahoo_con):
+    def _yahoo_get_recent_activity(self, yahoo_con):
+        dfs = []
+        for activity in yahoo_con.get_league_transactions():
+            if activity.type != 'commish':
+                for player in activity.players:
+                    el_id = [
+                        el
+                        for el in player.clean_data_dict()['transaction_data'].keys()
+                        if el.endswith('_team_key')
+                    ][0]
 
-    #     df = []
-    #     for activity in yahoo_con.get_league_transactions():
-    #         if activity.type != 'commish':
-    #             for player in activity.players:
-    #                 el_id = [el for el in player.clean_data_dict()['transaction_data'].keys() if el.endswith('_team_key')][0]
+                    dfs.append(
+                        {
+                            'season': self.cur_season,
+                            'platform': 'Yahoo',
+                            'league_id': yahoo_con.league_id,
+                            'timestamp': dt.fromtimestamp(activity.timestamp),
+                            'competitor_id': int(
+                                player.clean_data_dict()['transaction_data'][el_id].replace(
+                                    '454.l.121793.t.', ''
+                                )
+                            ),
+                            'action': player.clean_data_dict()['transaction_data']['type'],
+                            'player': player.clean_data_dict()['name']['full'],
+                        }
+                    )
 
-    #                 df.append({
-    #                     'season': self.cur_season,
-    #                     'platform': 'Yahoo',
-    #                     'league_id': yahoo_con.league_id,
-    #                     'timestamp': dt.fromtimestamp(activity.timestamp),
-    #                     'competitor_id': int(player.clean_data_dict()['transaction_data'][el_id].replace('454.l.121793.t.', '')),
-    #                     'action': player.clean_data_dict()['transaction_data']['type'],
-    #                     'player': player.clean_data_dict()['name']['full']
-    #                 })
+        df_t = pl.read_database(
+            f"SELECT * FROM fty.recent_activity WHERE season = '{self.cur_season}' AND platform = 'Yahoo' AND league_id = {yahoo_con.league_id}",
+            self.db_con,
+        )
+        return pl.DataFrame(dfs).join(df_t, on=df_t.columns, how='anti')
 
-    #     df_t = read_sql(f"SELECT * FROM fty.recent_activity WHERE season = '{self.cur_season}' AND platform = 'Yahoo' AND league_id = {yahoo_con.league_id}", self.db_con)
-    #     df = DataFrame(df).merge(df_t, how='outer', indicator=True)
-    #     return df[(df._merge=='left_only')].drop('_merge', axis=1)
+    def fty_get_matchup_box_score(self):
+        # Keep ingestion as league specific because they can have different matchup periods
+        for con in self.fty_con:
+            print('\n--------------------- ' + con + ' fty.matchup_box_score')
+            if con.startswith('ESPN'):
+                df = self._espn_get_matchup_box_score(self.fty_con[con])
+            elif con.startswith('Yahoo'):
+                df = self._yahoo_get_matchup_box_score(self.fty_con[con])
 
-    # def fty_get_matchup_box_score(self):
+            # Delete from database
+            db_ex = self.db_con.connect()
+            db_ex.execute(
+                sqlalchemy.sql.text(
+                    f"DELETE FROM fty.matchup_box_score WHERE season = '{self.cur_season}' AND platform = '{con.split(';')[0]}' AND league_id = {con.split(';')[1]} AND matchup = {df['matchup'][0]}"
+                )
+            )
+            db_ex.commit()
 
-    #     # Keep ingestion as league specific because they can have different matchup periods
-    #     for con in self.fty_con:
-    #         print('\n--------------------- ' + con + ' fty.matchup_box_score')
-    #         if con.startswith('ESPN'):
-    #             df = self._espn_get_matchup_box_score(self.fty_con[con])
-    #         elif con.startswith('Yahoo'):
-    #             df = self._yahoo_get_matchup_box_score(self.fty_con[con])
+            # Write to database
+            # df.to_pandas().to_sql(
+            #     'matchup_box_score', self.db_con, schema='fty', index=False, if_exists='append'
+            # )
+            print(con + ' fty.matchup_box_score has been updated\n\n')
+            return df
 
-    #         # Delete from database
-    #         db_ex = self.db_con.connect()
-    #         db_ex.execute(sqlalchemy.sql.text(f"DELETE FROM fty.matchup_box_score WHERE season = '{self.cur_season}' AND platform = '{con.split(';')[0]}' AND league_id = {con.split(';')[1]} AND matchup = {df['matchup'][0]}"))
-    #         db_ex.commit()
+    def _espn_get_matchup_box_score(self, espn_con):
+        box_scores = espn_con.box_scores(matchup_period=espn_con.currentMatchupPeriod)
+        league_cats = pl.read_database(
+            f"SELECT * FROM fty.league_categories WHERE platform = 'ESPN' AND season = '{self.cur_season}' AND league_id = {espn_con.league_id}",
+            self.db_con,
+        )
+        stats = league_cats['category'].to_list()
 
-    #         # Write to database
-    #         df.to_sql('matchup_box_score', self.db_con, schema='fty', index=False, if_exists='append')
-    #         print(con + ' fty.matchup_box_score has been updated\n\n')
+        dfs = []
+        for matchup in box_scores:
+            for h_a in ['home', 'away']:
+                competitor = getattr(matchup, h_a + '_team')
+                competitor_stats = getattr(matchup, h_a + '_stats')
 
-    # def _espn_get_matchup_box_score(self, espn_con):
+                if competitor != 0:
+                    dfs.append(
+                        {
+                            **{
+                                'season': self.cur_season,
+                                'platform': 'ESPN',
+                                'league_id': espn_con.league_id,
+                                'competitor_id': competitor.team_id,
+                                'matchup': espn_con.currentMatchupPeriod,
+                            },
+                            **dict(zip(stats, [competitor_stats[stat]['value'] for stat in stats])),
+                        }
+                    )
 
-    #     box_scores = espn_con.box_scores(matchup_period = espn_con.currentMatchupPeriod)
-    #     league_cats = read_sql(f"SELECT * FROM fty.league_categories WHERE platform = 'ESPN' AND season = '{self.cur_season}' AND league_id = {espn_con.league_id}", self.db_con)
-    #     stats = league_cats['category']
+        cat_labels = league_cats.join(
+            pl.read_database('SELECT * FROM fty.category_label', self.db_con),
+            how='left',
+            left_on='category',
+            right_on='fty_category',
+        )
 
-    #     df = []
-    #     for matchup in box_scores:
-    #         for h_a in ['home', 'away']:
-    #             competitor = getattr(matchup, h_a + '_team')
-    #             competitor_stats = getattr(matchup, h_a + '_stats')
+        return pl.DataFrame(dfs).rename(
+            dict(zip(cat_labels['category'], cat_labels['nba_category']))
+        )
 
-    #             if competitor != 0:
-    #                 df.append({
-    #                     ** {
-    #                         'season': self.cur_season,
-    #                         'platform': 'ESPN',
-    #                         'league_id': espn_con.league_id,
-    #                         'competitor_id': competitor.team_id,
-    #                         'matchup': espn_con.currentMatchupPeriod
-    #                     } ,
-    #                     ** dict(zip(stats, [competitor_stats[stat]['value'] for stat in stats]))
-    #                 })
+    def _yahoo_get_matchup_box_score(self, yahoo_con):
+        qry = f"""
+            SELECT
+                ls.season,
+                ls.platform,
+                ls.league_id,
+                ls.week AS matchup,
+                id.yahoo_id,
+                gs.game_date,
+                gs.game_id,
+                bs.pts,
+                bs.blk,
+                bs.stl,
+                bs.ast,
+                bs.reb,
+                bs.tov,
+                bs.fgm,
+                bs.fga,
+                bs.ftm,
+                bs.fta,
+                bs.fg3_m
+            FROM nba.player_box_score AS bs
+            LEFT JOIN nba.league_game_Schedule AS gs ON bs.game_id = gs.game_id
+            LEFT JOIN util.nba_fty_name_match AS id ON bs.player_id = id.nba_id
+            INNER JOIN (
+                SELECT DISTINCT
+                    season,
+                    platform,
+                    league_id,
+                    week,
+                    week_start,
+                    week_end
+                FROM fty.league_schedule
+                WHERE platform = 'Yahoo'
+                    AND season = '{self.cur_season}'
+                    AND league_id = {yahoo_con.league_id}
+                    AND '{self.cur_date_est}' BETWEEN week_start AND week_end
+            ) AS ls ON gs.game_date BETWEEN ls.week_start AND ls.week_end
+        """
 
-    #     cat_labels = (
-    #         league_cats
-    #         .merge(
-    #             read_sql("SELECT * FROM fty.category_label", self.db_con),
-    #             how='left',
-    #             left_on='category',
-    #             right_on='fty_category'
-    #         )
-    #         .set_index('fty_category')['nba_category']
-    #         .to_dict()
-    #     )
+        box_scores = (
+            pl.read_database(qry, self.db_con)
+            # .with_columns(pl.col('game_date').cast(pl.Date)) # NOT SURE WHY NEEDED?
+        )
 
-    #     return DataFrame(df).rename(cat_labels, axis='columns')
+        dfs = []
+        for competitor in yahoo_con.get_league_teams():
+            for date_r in pl.date_range(
+                box_scores['game_date'].min(), box_scores['game_date'].max()
+            ):
+                for player in yahoo_con.get_team_roster_player_info_by_date(
+                    competitor.team_id, date_r
+                ):
+                    if player.selected_position.position not in ['IL+', 'BN']:
+                        dfs.append(
+                            {
+                                'competitor_id': competitor.team_id,
+                                'game_date': date_r,
+                                'yahoo_id': player.player_id,
+                            }
+                        )
 
-    # def _yahoo_get_matchup_box_score(self, yahoo_con):
-    #     # TRED WITH CAUTION: still need to configure for non-conventional categories
-
-    #     qry = f"""
-    #         SELECT
-    #         	ls.season,
-    #         	ls.platform,
-    #         	ls.league_id,
-    #         	ls.week AS matchup,
-    #         	id.yahoo_id,
-    #             gs.game_date,
-    #             gs.game_id,
-    #         	bs.pts,
-    #         	bs.blk,
-    #         	bs.stl,
-    #         	bs.ast,
-    #         	bs.reb,
-    #         	bs.tov,
-    #         	bs.fgm,
-    #         	bs.fga,
-    #         	bs.ftm,
-    #         	bs.fta,
-    #         	bs.fg3_m
-    #         FROM nba.player_box_score AS bs
-    #         LEFT JOIN nba.league_game_Schedule AS gs ON bs.game_id = gs.game_id
-    #         LEFT JOIN util.nba_fty_name_match AS id ON bs.player_id = id.nba_id
-    #         INNER JOIN (
-    #         	SELECT DISTINCT
-    #         		season,
-    #         		platform,
-    #         		league_id,
-    #         		week,
-    #         		week_start,
-    #         		week_end
-    #         	FROM fty.league_schedule
-    #         	WHERE platform = 'Yahoo'
-    #         		AND season = '{self.cur_season}'
-    #         		AND league_id = {yahoo_con.league_id}
-    #                 AND '{self.cur_date_est}' BETWEEN week_start AND week_end
-    #         ) AS ls ON gs.game_date BETWEEN ls.week_start AND ls.week_end
-    #     """
-
-    #     box_scores = read_sql(qry, self.db_con)
-    #     box_scores['game_date'] = to_datetime(box_scores['game_date'])
-
-    #     df = []
-    #     for competitor in yahoo_con.get_league_teams():
-    #         for dt in date_range(box_scores['game_date'].min(), box_scores['game_date'].max()):
-    #             for player in yahoo_con.get_team_roster_player_info_by_date(competitor.team_id, dt):
-    #                 if player.selected_position.position not in ['IL+', 'BN']:
-    #                     df.append({'competitor_id': competitor.team_id, 'game_date': dt, 'yahoo_id': player.player_id})
-
-    #     return (
-    #         DataFrame(df)
-    #         .merge(box_scores, on=['yahoo_id', 'game_date'], how='inner')
-    #         .drop(['yahoo_id', 'game_date', 'game_id'], axis='columns')
-    #         .groupby(by=['season', 'platform', 'league_id', 'competitor_id', 'matchup'], as_index=False)
-    #         .sum()
-    #         .assign(
-    #             fg_pct = lambda x: x['fgm'] / x['fga'],
-    #             ft_pct = lambda x: x['ftm'] / x['fta']
-    #         )
-    #     )
+        return (
+            pl.DataFrame(dfs)
+            .join(box_scores, on=['yahoo_id', 'game_date'], how='inner')
+            .group_by(['season', 'platform', 'league_id', 'competitor_id', 'matchup'])
+            .agg(pl.all().exclude(['yahoo_id', 'game_date', 'game_id']).sum())
+            .with_columns(
+                fg_pct=pl.col('fgm') / pl.col('fga'), ft_pct=pl.col('ftm') / pl.col('fta')
+            )
+        )
