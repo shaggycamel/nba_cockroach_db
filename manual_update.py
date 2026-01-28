@@ -3,17 +3,6 @@ from dataHub import dataHub
 dh = dataHub('postgre')
 # dh = dataHub('cockroach')
 
-
-[
-    'nba.player/team_box_score',
-    'nba.league_game_schedule/past',
-    'nba.league_game_schedule/future',
-    'fty.recent_activity',
-    'fty.matchup_box_score',
-    'fty.free_agents',
-    'fty.competitor_roster',
-]
-
 # ---------------------------------- NBA Data
 
 # ---- Player Season Stats - DONE 2025-26
