@@ -370,7 +370,7 @@ class dataHub:
             .strftime('%Y-%m-%d')
         )
         game_ids = pl.read_database(
-            f"SELECT game_id, game_date FROM nba.league_game_schedule WHERE game_date > '{bs_max_dt}' AND game_date <= current_date",
+            f"SELECT game_id, game_date FROM nba.league_game_schedule WHERE game_date > '{bs_max_dt}' AND game_date <= current_date",  # replace current_date with self.date_est eventually
             self.db_con,
         )
         trad_adv_lst = ['player', 'team']
