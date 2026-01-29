@@ -27,10 +27,10 @@ class dataHub:
         # Scalars
         self.cur_season = nba_parameters.Season.current_season
         self.cur_season_year = int(nba_parameters.Season.current_season[0:4])
-        # self.cur_season = '2024-25'
-        # self.cur_season_year = 2024
         self.prev_season = nba_parameters.Season.previous_season
         self.prev_season_year = int(nba_parameters.Season.previous_season[0:4])
+        self.date_est = dt.datetime.now(zoneinfo.ZoneInfo('America/New_York')).date()
+        self.timestamp_utc = dt.datetime.now(zoneinfo.ZoneInfo('UTC'))
         self.db_con = self._db_connect(platform)
         self.fty_con = self._fty_con()
 
@@ -184,9 +184,8 @@ class dataHub:
             self.db_con,
         ).rename({'team': 'Team'})
 
-        cur_date = dt.datetime.now(zoneinfo.ZoneInfo('America/New_York')).date()
         game_ids = pl.read_database(
-            f"SELECT game_date, game_id, matchup FROM nba.league_game_schedule WHERE game_date BETWEEN '{cur_date}' AND '{cur_date + dt.timedelta(days=2)}'",
+            f"SELECT game_date, game_id, matchup FROM nba.league_game_schedule WHERE game_date BETWEEN '{self.date_est}' AND '{self.date_est + dt.timedelta(days=2)}'",
             self.db_con,
         )
 
@@ -369,8 +368,9 @@ class dataHub:
             .item()
             .strftime('%Y-%m-%d')
         )
+
         game_ids = pl.read_database(
-            f"SELECT game_id, game_date FROM nba.league_game_schedule WHERE game_date > '{bs_max_dt}' AND game_date <= current_date",  # replace current_date with self.date_est eventually
+            f"SELECT game_id, game_date FROM nba.league_game_schedule WHERE game_date > '{bs_max_dt}' AND game_date <= '{self.date_est}'",
             self.db_con,
         )
         trad_adv_lst = ['player', 'team']
@@ -751,7 +751,7 @@ class dataHub:
                     'season': self.cur_season,
                     'platform': 'ESPN',
                     'league_id': espn_con.league_id,
-                    'timestamp': dt.datetime.now(zoneinfo.ZoneInfo('UTC')),
+                    'timestamp': self.timestamp_utc,
                     'player_id': free_agent.playerId,
                     'player_name': free_agent.name,
                     'player_team': free_agent.proTeam.replace('PHL', 'PHI').replace('PHO', 'PHX'),
@@ -789,9 +789,7 @@ class dataHub:
             .with_columns(pl.col('player_injury_status').str.replace('', 'ACTIVE'))
             .insert_column(
                 4,
-                column=pl.Series(
-                    'timestamp', [dt.datetime.now(zoneinfo.ZoneInfo('UTC'))] * len(dfs)
-                ),
+                column=pl.Series('timestamp', [self.timestamp_utc] * len(dfs)),
             )
         )
 
@@ -979,9 +977,9 @@ class dataHub:
             "SELECT * FROM util.table_column_order WHERE table_name = 'competitor_roster' ORDER BY table_column_order",
             self.db_con,
         )['column_name'].to_list()
-        assigned_date = dt.datetime.now(zoneinfo.ZoneInfo('America/New_York')).date()
+
         df_mup = pl.read_database(
-            f"SELECT * FROM fty.league_matchup_dates WHERE '{assigned_date}' BETWEEN matchup_start AND matchup_end",
+            f"SELECT * FROM fty.league_matchup_dates WHERE '{self.date_est}' BETWEEN matchup_start AND matchup_end",
             self.db_con,
         )
 
@@ -989,7 +987,7 @@ class dataHub:
         db_ex = self.db_con.connect()
         db_ex.execute(
             sqlalchemy.sql.text(
-                f"DELETE FROM fty.competitor_roster WHERE assigned_date = '{assigned_date}'"
+                f"DELETE FROM fty.competitor_roster WHERE assigned_date = '{self.date_est}'"
             )
         )
         db_ex.commit()
@@ -1004,7 +1002,7 @@ class dataHub:
 
         df = (
             pl.concat(dfs)
-            .with_columns(pl.lit(assigned_date).alias('assigned_date'))
+            .with_columns(pl.lit(self.date_est).alias('assigned_date'))
             .join(df_mup, on=['platform', 'league_id'], how='left')
             .select(col_order)
         )
@@ -1024,7 +1022,7 @@ class dataHub:
                         'season': self.cur_season,
                         'platform': 'ESPN',
                         'league_id': espn_con.league_id,
-                        'timestamp': dt.datetime.now(zoneinfo.ZoneInfo('UTC')),
+                        'timestamp': self.timestamp_utc,
                         'matchup_period': espn_con.currentMatchupPeriod,
                         'competitor_id': competitor.team_id,
                         'player_fantasy_id': player.playerId,
@@ -1062,9 +1060,7 @@ class dataHub:
             .with_columns(pl.col('player_injury_status').str.replace('', 'ACTIVE'))
             .insert_column(
                 4,
-                column=pl.Series(
-                    'timestamp', [dt.datetime.now(zoneinfo.ZoneInfo('UTC'))] * len(dfs)
-                ),
+                column=pl.Series('timestamp', [self.timestamp_utc] * len(dfs)),
             )
         )
 
