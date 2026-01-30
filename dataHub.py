@@ -694,7 +694,14 @@ class dataHub:
             .with_columns(pl.col('salary').backward_fill().forward_fill().over('player_id'))
         )
 
-        if len(df_write) > 0:
+        # Write to database depending on situation
+        if pre_season:
+            df.to_pandas().to_sql(
+                'team_roster', self.db_con, schema='nba', index=False, if_exists='append'
+            )
+            print('nba.team_roster has been updated\n\n')
+
+        elif len(df_write) > 0:
             del_ids = df_write.unique('player_id')['player_id'].to_list()
             del_ids = ', '.join(map(str, del_ids))
 
@@ -707,7 +714,6 @@ class dataHub:
             )
             db_ex.commit()
 
-            # Write to database
             df_write.to_pandas().to_sql(
                 'team_roster', self.db_con, schema='nba', index=False, if_exists='append'
             )
