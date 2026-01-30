@@ -668,58 +668,62 @@ class dataHub:
             .select(col_order)
         )
 
-        df_existing = (
-            pl.read_database(
-                f"SELECT * FROM nba.team_roster WHERE season = '{self.cur_season}'", self.db_con
-            )
-            .with_columns(pl.col(col).cast(pl.Int64) for col in ['team_id', 'player_id'])
-            .with_columns(
-                pl.when(pl.col('exit_date').is_null())
-                .then(pl.lit(self.date_est).cast(pl.Date))
-                .alias('exit_date')
-            )
-        )
-
-        df_write = (
-            pl.concat([df, df_existing])
-            .join(
-                (
-                    df.join(df_existing, on=['season', 'team_id', 'player_id'], how='anti').select(
-                        'player_id'
-                    )
-                ),
-                on='player_id',
-                how='inner',
-            )
-            .with_columns(pl.col('salary').backward_fill().forward_fill().over('player_id'))
-        )
-
         # Write to database depending on situation
         if pre_season:
             df.to_pandas().to_sql(
                 'team_roster', self.db_con, schema='nba', index=False, if_exists='append'
             )
             print('nba.team_roster has been updated\n\n')
-
-        elif len(df_write) > 0:
-            del_ids = df_write.unique('player_id')['player_id'].to_list()
-            del_ids = ', '.join(map(str, del_ids))
-
-            # Delete old records from database
-            db_ex = self.db_con.connect()
-            db_ex.execute(
-                sqlalchemy.sql.text(
-                    f"DELETE FROM nba.team_roster WHERE season = '{self.cur_season}' AND player_id IN ({del_ids})"
-                )
-            )
-            db_ex.commit()
-
-            df_write.to_pandas().to_sql(
-                'team_roster', self.db_con, schema='nba', index=False, if_exists='append'
-            )
-            print('nba.team_roster has been updated\n\n')
         else:
-            print('nba.team_roster: nothing to update\n\n')
+            df_existing = pl.read_database(
+                f"SELECT * FROM nba.team_roster WHERE season = '{self.cur_season}'",
+                self.db_con,
+                schema_overrides={
+                    'team_id': pl.Int64,
+                    'player_id': pl.Int64,
+                    'entry_date': pl.Date,
+                    'exit_date': pl.Date,
+                },
+            ).with_columns(
+                pl.when(pl.col('exit_date').is_null())
+                .then(pl.lit(self.date_est))
+                .otherwise(pl.col('exit_date'))
+                .alias('exit_date')
+            )
+
+            df_traded = (
+                pl.concat([df, df_existing])
+                .join(
+                    (
+                        df.join(
+                            df_existing, on=['season', 'team_id', 'player_id'], how='anti'
+                        ).select('player_id')
+                    ),
+                    on='player_id',
+                    how='inner',
+                )
+                .with_columns(pl.col('salary').backward_fill().forward_fill().over('player_id'))
+            )
+
+            if len(df_traded) > 0:
+                del_ids = df_traded.unique('player_id')['player_id'].to_list()
+                del_ids = ', '.join(map(str, del_ids))
+
+                # Delete old records from database
+                db_ex = self.db_con.connect()
+                db_ex.execute(
+                    sqlalchemy.sql.text(
+                        f"DELETE FROM nba.team_roster WHERE season = '{self.cur_season}' AND player_id IN ({del_ids})"
+                    )
+                )
+                db_ex.commit()
+
+                df_traded.to_pandas().to_sql(
+                    'team_roster', self.db_con, schema='nba', index=False, if_exists='append'
+                )
+                print('nba.team_roster traded players have been updated\n\n')
+            else:
+                print('nba.team_roster: nothing to update\n\n')
 
     def _fty_con(self):
         """Create connection object to fanstasy api"""

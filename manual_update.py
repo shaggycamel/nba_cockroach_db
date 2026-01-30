@@ -27,8 +27,7 @@ dh = dataHub('postgre')
 
 
 # ----- Team Roster - DAILY - DONE 2025-26
-# Also comprises of updating salaries. Look at player_salaries.py
-# Eventually coportate this file into dataHub
+# Also comprises of updating salaries. Look at player_salaries.py - Eventually coportate this file into dataHub
 # dh.get_team_roster(pre_season=True) # <--- Run this one if updating prior to season
 # dh.get_team_roster()
 
