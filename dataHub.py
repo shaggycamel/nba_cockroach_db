@@ -631,7 +631,7 @@ class dataHub:
         )
         print('nba.current_game_schedule has been updated\n\n')
 
-    def get_team_roster(self):
+    def get_team_roster(self, pre_season=False):
         col_order = pl.read_database(
             "SELECT column_name FROM util.table_column_order WHERE table_name = 'team_roster' ORDER BY column_order",
             self.db_con,
@@ -659,7 +659,8 @@ class dataHub:
                     pl.col('num').str.replace('', None),
                     pl.lit(self.cur_season).alias('season'),
                     pl.lit(None).cast(pl.Float64).alias('salary'),
-                    pl.lit(None).cast(pl.Date).alias('movement_date'),
+                    pl.lit(None if pre_season else self.date_est).cast(pl.Date).alias('entry_date'),
+                    pl.lit(None).cast(pl.Date).alias('exit_date'),
                 ]
             )
             .join(self.nba_teams, left_on='teamid', right_on='id', how='left')
@@ -667,17 +668,52 @@ class dataHub:
             .select(col_order)
         )
 
-        # CONTROL FOR PLAYERS BEING TRADED
-        # df_t = read_sql(f"SELECT * FROM nba.team_roster WHERE season = '{self.cur_season}'", db_con)
-        # df_t = df_t.drop('salary', axis='columns')
-        # df = concat([df, df_t])
-        # df = df[~df.duplicated(keep = False)].reset_index(drop=True)
-
-        # Write to database
-        df.to_pandas().to_sql(
-            'team_roster', self.db_con, schema='nba', index=False, if_exists='append'
+        df_existing = (
+            pl.read_database(
+                f"SELECT * FROM nba.team_roster WHERE season = '{self.cur_season}'", self.db_con
+            )
+            .with_columns(pl.col(col).cast(pl.Int64) for col in ['team_id', 'player_id'])
+            .with_columns(
+                pl.when(pl.col('exit_date').is_null())
+                .then(pl.lit(self.date_est).cast(pl.Date))
+                .alias('exit_date')
+            )
         )
-        print('nba.team_roster has been updated\n\n')
+
+        df_write = (
+            pl.concat([df, df_existing])
+            .join(
+                (
+                    df.join(df_existing, on=['season', 'team_id', 'player_id'], how='anti').select(
+                        'player_id'
+                    )
+                ),
+                on='player_id',
+                how='inner',
+            )
+            .with_columns(pl.col('salary').backward_fill().forward_fill().over('player_id'))
+        )
+
+        if len(df_write) > 0:
+            del_ids = df_write.unique('player_id')['player_id'].to_list()
+            del_ids = ', '.join(map(str, del_ids))
+
+            # Delete old records from database
+            db_ex = self.db_con.connect()
+            db_ex.execute(
+                sqlalchemy.sql.text(
+                    f"DELETE FROM nba.team_roster WHERE season = '{self.cur_season}' AND player_id IN ({del_ids})"
+                )
+            )
+            db_ex.commit()
+
+            # Write to database
+            df_write.to_pandas().to_sql(
+                'team_roster', self.db_con, schema='nba', index=False, if_exists='append'
+            )
+            print('nba.team_roster has been updated\n\n')
+        else:
+            print('nba.team_roster: nothing to update\n\n')
 
     def _fty_con(self):
         """Create connection object to fanstasy api"""
