@@ -1,7 +1,7 @@
 from dataHub import dataHub
 
-dh = dataHub('postgre')
-# dh = dataHub('cockroach')
+# dh = dataHub('postgre')
+dh = dataHub('cockroach')
 
 # ---------------------------------- NBA Data
 

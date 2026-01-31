@@ -563,7 +563,7 @@ class dataHub:
         db_ex = self.db_con.connect()
         db_ex.execute(
             sqlalchemy.sql.text(
-                f"DELETE FROM nba.league_game_schedule WHERE season = '{season}-{str(season + 1)[-2:]}'"
+                f"DELETE FROM nba.league_game_schedule WHERE season = '{self.cur_season}'"
             )
         )
         db_ex.commit()
@@ -601,7 +601,22 @@ class dataHub:
                 )
 
         df = (
-            pl.DataFrame(dfs)
+            pl.concat(
+                [
+                    pl.DataFrame(dfs),
+                    (
+                        pl.DataFrame(dfs)
+                        .with_columns(pl.col('matchup').str.split_exact(' ', n=2))
+                        .unnest(pl.col('matchup'))
+                        .with_columns(
+                            (pl.col('field_2') + ' @ ' + pl.col('field_0'))
+                            .str.strip_chars()
+                            .alias('matchup')
+                        )
+                        .drop(cs.starts_with('field'))
+                    ),
+                ]
+            )
             .with_columns(
                 [
                     pl.lit(self.cur_season).alias('season'),
