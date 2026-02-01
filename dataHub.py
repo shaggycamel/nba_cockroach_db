@@ -547,16 +547,27 @@ class dataHub:
             )
             .with_columns(
                 [
-                    pl.when(pl.col('wl') == 'W')
-                    .then(pl.col('team_abbreviation'))
-                    .otherwise(pl.col('opponent'))
-                    .alias('team_winner'),
-                    pl.when(pl.col('wl') == 'L')
-                    .then(pl.col('team_abbreviation'))
-                    .otherwise(pl.col('opponent'))
-                    .alias('team_loser'),
+                    (
+                        pl.when(pl.col('wl') == 'W')
+                        .then(pl.col('team_abbreviation'))
+                        .otherwise(pl.col('opponent'))
+                        .alias('team_winner')
+                    ),
+                    (
+                        pl.when(pl.col('wl') == 'L')
+                        .then(pl.col('team_abbreviation'))
+                        .otherwise(pl.col('opponent'))
+                        .alias('team_loser')
+                    ),
+                    (
+                        pl.when(pl.col('matchup').str.contains('vs.'))
+                        .then(pl.lit(True))
+                        .otherwise(pl.lit(False))
+                        .alias('home')
+                    ),
                 ]
             )
+            .rename({'team_abbreviation': 'team'})
             .select(col_order)
         )
 
@@ -617,11 +628,28 @@ class dataHub:
                     ),
                 ]
             )
+            .with_columns(pl.col('matchup').str.split_exact(' ', n=2).alias('temp'))
+            .unnest(pl.col('temp'))
             .with_columns(
                 [
                     pl.lit(self.cur_season).alias('season'),
                     pl.lit(None).alias('team_winner'),
                     pl.lit(None).alias('team_loser'),
+                    pl.col('field_0').alias('team'),
+                    pl.col('field_2').alias('opponent'),
+                    pl.when(pl.col('field_1') == 'vs.')
+                    .then(pl.lit(True))
+                    .otherwise(pl.lit(False))
+                    .alias('home'),
+                ]
+            )
+            .with_columns(
+                [
+                    pl.when(pl.col('matchup').str.strip_chars().is_in(['@', 'vs.']))
+                    .then(pl.lit('undetermined') if col == 'matchup' else pl.lit(None))
+                    .otherwise(pl.col(col))
+                    .alias(col)
+                    for col in ['team', 'opponent', 'matchup']
                 ]
             )
             .join_where(
@@ -630,15 +658,12 @@ class dataHub:
                 pl.col('game_date') <= pl.col('end_date'),
             )
             .select(col_order)
-            .unique()
             .join(
                 df_played_games.select('game_id').with_columns(pl.col('game_id').cast(pl.Int64)),
                 on='game_id',
                 how='anti',
             )
         )
-
-        # Need to consider when IN-Season tourney games / All star games are added to schedule
 
         # Write to database
         df.to_pandas().to_sql(
