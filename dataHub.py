@@ -11,6 +11,7 @@ import datetime as dt
 import polars as pl
 import janitor.polars
 import polars.selectors as cs
+import nbainjuries
 import nba_api.stats.endpoints as nba_ep
 from nba_api.stats.static import teams, players
 import nba_api.stats.library.parameters as nba_parameters
@@ -136,7 +137,91 @@ class dataHub:
         )
         print('nba.player_info has been updated\n\n')
 
-    def get_team_injuries(self):
+    def get_team_injuries(self, force_date=None):
+
+        dt_est = self.date_est if force_date is None else force_date
+        col_order = pl.read_database(
+            "SELECT column_name FROM util.table_column_order WHERE table_name = 'injuries' ORDER BY column_order",
+            self.db_con,
+        )['column_name'].to_list()
+
+        # Data objects used to reconcile and complimet injury date
+        teams_true = pl.read_database(
+            "SELECT CONCAT(team_long, ' ', team_name) AS team, team_slug FROM nba.teams",
+            self.db_con,
+        )
+
+        game_ids = pl.read_database(
+            f"SELECT game_date, game_id, matchup FROM nba.league_game_schedule WHERE game_date BETWEEN '{dt_est}' AND '{dt_est + dt.timedelta(days=2)}' AND matchup LIKE '%@%'",
+            self.db_con,
+        )
+
+        player_ids = pl.read_database(
+            'SELECT nba_name, nba_id FROM util.nba_fty_name_match', self.db_con
+        ).with_columns(
+            pl.col('nba_name').str.normalize('NFKD').str.replace_all('[^\\x00-\\x7F]', '')
+        )
+
+        dt_est = dt.datetime.combine(
+            dt_est, dt.time(0, 0), tzinfo=zoneinfo.ZoneInfo('America/New_York')
+        )
+        times = [dt_est + dt.timedelta(minutes=(60 / 4) * i) for i in range(24 * 4)]
+        times = [tm.replace(tzinfo=None) for tm in times]
+        times.reverse()
+
+        def get_valid_time():
+            for tm in times:
+                try:
+                    nbainjuries._parser.validate_injrepurl(nbainjuries.injury.gen_url(tm))
+                    return tm
+                except (requests.exceptions.HTTPError, Exception) as e:
+                    continue
+
+        # clean up for ingestion
+        df = (
+            pl.from_pandas(nbainjuries.injury.get_reportdata(get_valid_time(), return_df=True))
+            .clean_names()
+            .filter(
+                (pl.col('reason') != 'NOT YET SUBMITTED') & (pl.col('player_name').is_not_null())
+            )
+            .with_columns(pl.col('player_name').str.split(', '))
+            .with_columns(
+                [
+                    pl.col('game_date').str.to_date(format='%m/%d/%Y'),
+                    pl.col('matchup').str.replace_all('@', ' @ '),
+                    (
+                        pl.col('player_name').list.get(1) + ' ' + pl.col('player_name').list.get(0)
+                    ).alias('player_name'),
+                ]
+            )
+            .join(teams_true, how='left', on='team')
+            .join(player_ids, how='left', left_on='player_name', right_on='nba_name')
+            .join(game_ids, how='left', on=['game_date', 'matchup'])
+            .rename({'current_status': 'status'})
+            .select(col_order)
+        )
+
+        # Delete old records from database
+        db_ex = self.db_con.connect()
+        for row in df.iter_rows(named=True):
+            game_date = row['game_date']
+            game_id = row['game_id']
+            # replace to handle single quotes if they exist
+            player_name = row['player_name'].replace("'", "''")
+            db_ex.execute(
+                sqlalchemy.sql.text(
+                    f"DELETE FROM nba.injuries WHERE game_date = '{game_date}' AND game_id = {game_id} AND player_name = '{player_name}'"
+                )
+            )
+        db_ex.commit()
+
+        # Write to database
+        df.to_pandas().to_sql(
+            'injuries', self.db_con, schema='nba', index=False, if_exists='append'
+        )
+        print('nba.injuries has been updated\n\n')
+
+    def get_team_injuries_old(self):
         col_order = pl.read_database(
             "SELECT column_name FROM util.table_column_order WHERE table_name = 'injuries' ORDER BY column_order",
             self.db_con,

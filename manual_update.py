@@ -39,7 +39,7 @@ dh = dataHub('postgre')
 
 
 # ----- Free Agents - DAILY
-dh.fty_get_free_agents()
+# dh.fty_get_free_agents()
 
 
 # ----- Competitor Roster - DAILY
@@ -60,35 +60,3 @@ dh.fty_get_free_agents()
 
 # ----- Fantasy Transactions - DAILY
 # dh.fty_get_recent_activity()
-
-
-import nbainjuries
-import datetime as dt
-import zoneinfo
-import requests
-import polars as pl
-import janitor.polars
-
-tz_est = zoneinfo.ZoneInfo('America/New_York')
-dt_est = dt.datetime.combine(dt.datetime.now(tz_est).date(), dt.time(0, 0), tzinfo=tz_est)
-times = [dt_est + dt.timedelta(minutes=15 * i) for i in range(24 * 4)]
-times = [tm.replace(tzinfo=None) for tm in times]
-times.reverse()
-
-
-def get_valid_time():
-    for tm in times:
-        try:
-            nbainjuries._parser.validate_injrepurl(nbainjuries.injury.gen_url(tm))
-            return tm
-        except (requests.exceptions.HTTPError, Exception) as e:
-            continue
-
-
-df = pl.from_pandas(
-    nbainjuries.injury.get_reportdata(get_valid_time(), return_df=True)
-).clean_names()
-
-(pl.from_pandas(df).clean_names())
-
-# Use polars to clean and ingest
