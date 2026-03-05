@@ -801,7 +801,7 @@ class dataHub:
             print('nba.team_roster has been updated\n\n')
         else:
             df_existing = pl.read_database(
-                f"SELECT * FROM nba.team_roster WHERE season = '{self.cur_season}'",
+                f"SELECT * FROM nba.team_roster WHERE season = '{self.cur_season}' AND exit_date IS NULL",
                 self.db_con,
                 schema_overrides={
                     'team_id': pl.Int64,
@@ -838,7 +838,7 @@ class dataHub:
                 db_ex = self.db_con.connect()
                 db_ex.execute(
                     sqlalchemy.sql.text(
-                        f"DELETE FROM nba.team_roster WHERE season = '{self.cur_season}' AND player_id IN ({del_ids})"
+                        f"DELETE FROM nba.team_roster WHERE season = '{self.cur_season}' AND player_id IN ({del_ids}) AND exit_date IS NULL"
                     )
                 )
                 db_ex.commit()
@@ -1340,10 +1340,10 @@ class dataHub:
         stats = league_cats['category'].to_list()
 
         dfs = []
-        for matchup in box_scores:
+        for box_score in box_scores:
             for h_a in ['home', 'away']:
-                competitor = getattr(matchup, h_a + '_team')
-                competitor_stats = getattr(matchup, h_a + '_stats')
+                competitor = getattr(box_score, h_a + '_team')
+                competitor_stats = getattr(box_score, h_a + '_stats')
 
                 if competitor != 0:
                     dfs.append(

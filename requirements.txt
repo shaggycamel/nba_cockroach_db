@@ -18,7 +18,7 @@ multidict==6.7.1
 multipledispatch==1.0.0
 myql==1.2.7
 natsort==8.4.0
-nba_api==1.11.3
+nba_api==1.11.4
 nbainjuries==1.1.0
 numpy==2.4.1
 oauthlib==3.3.1

@@ -2,5 +2,34 @@
     "[python]": {
         "editor.defaultFormatter": "charliermarsh.ruff",
         "editor.formatOnSave": true
-    }
+    },
+    "sqltools.connections": [
+        {
+            "ssh": "Disabled",
+            "previewLimit": 50,
+            "server": "localhost",
+            "port": 5432,
+            "driver": "PostgreSQL",
+            "name": "postgres",
+            "database": "nba",
+            "username": "postgres",
+            "password": "zxc123"
+        },
+        {
+            "pgOptions": {
+                "ssl": {
+                    "rejectUnauthorized": true
+                }
+            },
+            "ssh": "Disabled",
+            "previewLimit": 50,
+            "server": "nba-data-mgmt-9184.8nj.gcp-europe-west1.cockroachlabs.cloud",
+            "port": 26257,
+            "driver": "CockroachDB",
+            "name": "cockroach",
+            "database": "nba",
+            "username": "fred",
+            "password": "W15lrdGiHLKpPUgI3-5JHw"
+        }
+    ]
 }

@@ -1,7 +1,9 @@
 from dataHub import dataHub
+import datetime as dt
 
-dh = dataHub('postgre')
-# dh = dataHub('cockroach')
+
+# dh = dataHub('postgre')
+dh = dataHub('cockroach')
 
 # ---------------------------------- NBA Data
 
@@ -15,6 +17,7 @@ dh = dataHub('postgre')
 
 # ----- Injuries - DAILY
 # dh.get_team_injuries()
+# dh.get_team_injuries(force_date=dt.date(2026, 1, 15))
 
 
 # ----- Game Schedule - DAILY - DONE 2025-26
@@ -23,7 +26,7 @@ dh = dataHub('postgre')
 
 
 # ----- Box Scores - DAILY
-# dh.get_box_score()
+dh.get_box_score()
 
 
 # ----- Team Roster - DAILY - DONE 2025-26
