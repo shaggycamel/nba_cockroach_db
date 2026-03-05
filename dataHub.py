@@ -455,7 +455,7 @@ class dataHub:
         )
 
         game_ids = pl.read_database(
-            f"SELECT game_id, game_date FROM nba.league_game_schedule WHERE game_date > '{bs_max_dt}' AND game_date <= '{self.date_est}'",
+            f"SELECT DISTINCT game_id FROM nba.league_game_schedule WHERE game_date > '{bs_max_dt}' AND game_date <= '{self.date_est}'",
             self.db_con,
         )
         trad_adv_lst = ['player', 'team']
