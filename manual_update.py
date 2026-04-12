@@ -2,7 +2,7 @@ from dataHub import dataHub
 import datetime as dt
 
 
-# dh = dataHub('postgre')
+dh = dataHub('postgre')
 # dh = dataHub('cockroach')
 
 # ---------------------------------- NBA Data

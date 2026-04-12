@@ -1,4 +1,4 @@
-CREATE OR REPLACE VIEW nba.nba_team_roster_vw_new AS
+CREATE OR REPLACE VIEW nba.nba_team_roster_vw AS
 SELECT 
   tr.season,
   tr.team_id,

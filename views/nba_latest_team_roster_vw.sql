@@ -1,3 +1,5 @@
+CREATE OR REPLACE VIEW nba.nba_latest_team_roster_vw AS
+
 WITH cte_latest_team_roster AS (
          SELECT inner_q.season,
             inner_q.team_slug,

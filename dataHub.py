@@ -748,6 +748,11 @@ class dataHub:
                 on='game_id',
                 how='anti',
             )
+            .filter(
+                pl.col('team').is_in(self.nba_teams.get_column('abbreviation').to_list())
+                | pl.col('opponent').is_in(self.nba_teams.get_column('abbreviation').to_list())
+                | (pl.col('matchup') == 'undetermined')
+            )
         )
 
         # Write to database
@@ -854,7 +859,18 @@ class dataHub:
         """Create connection object to fanstasy api"""
 
         df_leagues = pl.read_database(
-            f"SELECT platform, league_id FROM fty.league WHERE season = '{self.cur_season}'",
+            f"""
+                SELECT lgl.platform, lgl.league_id, lgl_end.league_end_date
+                FROM fty.league AS lgl
+                LEFT JOIN (
+                    SELECT league_id, MAX(matchup_end) AS league_end_date
+                    FROM fty.league_matchup_dates
+                    WHERE season = '{self.cur_season}'
+                    GROUP BY league_id
+                ) AS lgl_end ON lgl.league_id = lgl_end.league_id
+                WHERE lgl.season = '{self.cur_season}'
+                    AND (lgl_end.league_end_date + 1) >= '{self.date_est}'
+            """,
             self.db_con,
         )
 
@@ -1045,8 +1061,24 @@ class dataHub:
         print('fty.league_matchup has been updated\n\n')
 
     def _espn_get_league_matchup(self, espn_con):
+
+        df_byes = pl.read_database(
+            f"SELECT * FROM fty.league_byes WHERE platform = 'ESPN' AND season = '{self.cur_season}' AND league_id = {espn_con.league_id}",
+            self.db_con,
+        )
+
         dfs = []
         for competitor in espn_con.teams:
+            if competitor.team_id in df_byes['competitor_id'].to_list():
+                bye_periods = (
+                    df_byes.filter(pl.col('competitor_id') == competitor.team_id)
+                    .get_column('matchup_period')
+                    .to_list()
+                )
+
+                for ix in bye_periods:
+                    competitor.schedule.insert(ix - 1, None)
+
             for ix, opponent in enumerate(competitor.schedule):
                 dfs.append(
                     {
@@ -1056,8 +1088,8 @@ class dataHub:
                         'matchup_period': ix + 1,
                         'competitor_id': competitor.team_id,
                         'opponent_id': opponent.home_team.team_id
-                        if competitor.team_id == opponent.away_team.team_id
-                        else opponent.away_team.team_id,
+                        if opponent and competitor.team_id == opponent.away_team.team_id
+                        else (opponent.away_team.team_id if opponent else None),
                     }
                 )
 

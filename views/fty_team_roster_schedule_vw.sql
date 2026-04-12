@@ -4,6 +4,8 @@ SELECT roster.season,
     roster.league_id,
     roster.assigned_date,
     roster.matchup_period,
+    schedule_dates.matchup_start,
+    schedule_dates.matchup_end,
     roster.competitor_id,
     competitor.competitor_name,
     roster.player_fantasy_id,
@@ -16,6 +18,7 @@ SELECT roster.season,
     opponent.competitor_name AS opponent_name
    FROM fty.competitor_roster roster
      LEFT JOIN fty.league_matchup schedule ON roster.season = schedule.season AND roster.platform = schedule.platform AND roster.league_id = schedule.league_id AND roster.competitor_id = schedule.competitor_id AND roster.matchup_period = schedule.matchup_period
+     LEFT JOIN fty.league_matchup_dates schedule_dates ON roster.season = schedule_dates.season AND roster.platform = schedule_dates.platform AND roster.league_id = schedule_dates.league_id AND roster.matchup_period = schedule_dates.matchup_period
      LEFT JOIN fty.league_competitor competitor ON roster.season = competitor.season AND roster.platform = competitor.platform AND roster.league_id = competitor.league_id AND roster.competitor_id = competitor.competitor_id
      LEFT JOIN fty.league_competitor opponent ON roster.season = opponent.season AND roster.platform = opponent.platform AND roster.league_id = opponent.league_id AND schedule.opponent_id = opponent.competitor_id::double precision
      LEFT JOIN ( SELECT nba_fty_name_match.nba_id,
