@@ -447,144 +447,182 @@ class dataHub:
         )
         print('nba.injuries has been updated\n\n')
 
-    def get_box_score(self):
+    def get_player_box_score(self):
+        # fmt: off
         bs_max_dt = (
-            pl.read_database('SELECT MAX(game_date) FROM nba.nba_team_box_score_vw', self.db_con)
+            pl.read_database('select max(game_date) from nba.nba_player_box_score_vw where min is not null', self.db_con)
             .item()
             .strftime('%Y-%m-%d')
         )
+        game_ids = pl.read_database(f"SELECT DISTINCT game_id FROM nba.league_game_schedule WHERE game_date > '{bs_max_dt}' AND game_date <= '{self.date_est}'", self.db_con)
+        cols_trad = pl.read_database("select * from util.table_column_order where table_name = 'player_box_score_traditional' order by column_order", self.db_con)
+        cols_adv = pl.read_database("select * from util.table_column_order where table_name = 'player_box_score_advanced' order by column_order", self.db_con)
+        # fmt: on
 
-        game_ids = pl.read_database(
-            f"SELECT DISTINCT game_id FROM nba.league_game_schedule WHERE game_date > '{bs_max_dt}' AND game_date <= '{self.date_est}'",
-            self.db_con,
-        )
-        trad_adv_lst = ['player', 'team']
-
-        print('\n--------------------- nba.player/team_box_score')
-        g_ids = game_ids.get_column('game_id').to_list()  # [0:3]
+        print('\n--------------------- nba.player_box_score')
+        dfs = []
+        g_ids = game_ids.get_column('game_id').to_list()
         for game_id in g_ids:
             game_id = '00' + str(int(game_id))
             print(game_id)
 
-            dfs = []
+            # Traditional stats
             try:
-                bst = nba_ep.boxscoretraditionalv3.BoxScoreTraditionalV3(game_id=game_id)
-            except Exception as e:
-                print(game_id + ': ' + str(e))
-                continue
-
-            for el in [0, 1]:
-                bst_col_order = pl.read_database(
-                    f"SELECT column_name FROM util.table_column_order WHERE table_name = '{trad_adv_lst[el]}_box_score_traditional' ORDER BY column_order",
-                    self.db_con,
-                )['column_name'].to_list()
-
-                if el == 0:
-                    bst_rename_dict = dict(
-                        zip(
-                            [
-                                'gameId',
-                                'teamId',
-                                'teamTricode',
-                                'personId',
-                                'playerName',
-                                'position',
-                                'comment',
-                                'minutes',
-                                'fieldGoalsMade',
-                                'fieldGoalsAttempted',
-                                'fieldGoalsPercentage',
-                                'threePointersMade',
-                                'threePointersAttempted',
-                                'threePointersPercentage',
-                                'freeThrowsMade',
-                                'freeThrowsAttempted',
-                                'freeThrowsPercentage',
-                                'points',
-                                'reboundsOffensive',
-                                'reboundsDefensive',
-                                'reboundsTotal',
-                                'assists',
-                                'steals',
-                                'blocks',
-                                'turnovers',
-                                'foulsPersonal',
-                                'plusMinusPoints',
-                            ],
-                            bst_col_order,
+                bst = (
+                    pl.from_pandas(
+                        nba_ep.boxscoretraditionalv3.BoxScoreTraditionalV3(
+                            game_id=game_id
+                        ).get_data_frames()[0]
+                    )
+                    .rename(
+                        dict(
+                            zip(
+                                cols_trad.drop_nulls()['origin_name'],
+                                cols_trad.drop_nulls()['column_name'],
+                            )
                         )
                     )
-                else:
-                    bst_rename_dict = dict(
-                        zip(
-                            [
-                                'gameId',
-                                'teamId',
-                                'teamTricode',
-                                'minutes',
-                                'fieldGoalsMade',
-                                'fieldGoalsAttempted',
-                                'fieldGoalsPercentage',
-                                'threePointersMade',
-                                'threePointersAttempted',
-                                'threePointersPercentage',
-                                'freeThrowsMade',
-                                'freeThrowsAttempted',
-                                'freeThrowsPercentage',
-                                'points',
-                                'reboundsOffensive',
-                                'reboundsDefensive',
-                                'reboundsTotal',
-                                'assists',
-                                'steals',
-                                'blocks',
-                                'turnovers',
-                                'foulsPersonal',
-                            ],
-                            bst_col_order,
-                        )
-                    )
-
-                df = (
-                    pl.from_pandas(bst.get_data_frames()[el])
-                    .rename({k: v for k, v in bst_rename_dict.items() if k != 'playerName'})
-                    .with_columns(
-                        [pl.col('min').str.replace('', None), pl.col('game_id').cast(pl.Int64)]
-                    )
+                    .with_columns(cs.string().replace('', None))
+                    .with_columns(pl.col('game_id').cast(pl.Int64))
                     .with_columns(
                         pl.col('min').str.replace(r':.*', '').cast(pl.Int64, strict=False)
                     )
-                )
-
-                if el == 0:
-                    df = df.with_columns(
+                    .with_columns(
                         (pl.col('firstName') + ' ' + pl.col('familyName')).alias('player_name')
                     )
-                else:
-                    df = (
-                        df.group_by(['game_id', 'team_id', 'team_abbreviation'])
-                        .agg(cs.numeric().sum())
-                        .with_columns(
-                            [
-                                (pl.col('fgm') / pl.col('fga')).alias('fg_pct'),
-                                (pl.col('fg3_m') / pl.col('fg3_a')).alias('fg3_pct'),
-                                (pl.col('ftm') / pl.col('fta')).alias('ft_pct'),
-                                pl.lit(None).alias('plus_minus'),  # just make none for place holder
-                            ]
+                    .select(cols_trad['column_name'].to_list())
+                )
+            except Exception as e:
+                print(game_id + ': ' + str(e))
+                # bst = pl.DataFrame({'game_id': [game_id]}).with_columns(pl.col('game_id').cast(pl.Int64))
+                break
+
+            # Advanced stats
+            try:
+                bsa = (
+                    pl.from_pandas(
+                        nba_ep.boxscoreadvancedv3.BoxScoreAdvancedV3(
+                            game_id=game_id
+                        ).get_data_frames()[0]
+                    )
+                    .rename(
+                        dict(
+                            zip(
+                                cols_adv.drop_nulls()['origin_name'],
+                                cols_adv.drop_nulls()['column_name'],
+                            )
                         )
                     )
+                    .with_columns(cs.string().replace('', None))
+                    .with_columns(pl.col('game_id').cast(pl.Int64))
+                    .select(cols_adv['column_name'].to_list())
+                )
+            except Exception as e:
+                print(game_id + ': ' + str(e))
+                # bsa = pl.DataFrame({'game_id': [game_id]}).with_columns(pl.col('game_id').cast(pl.Int64))
+                break
 
-                df = df.unique().select(bst_col_order)
-                dfs.append(df)
+            dfs.append(bst.join(bsa, on=['game_id', 'player_id'], how='left'))
 
-            dfs[0].to_pandas().to_sql(
-                'player_box_score', self.db_con, schema='nba', index=False, if_exists='append'
-            )
-            dfs[1].to_pandas().to_sql(
-                'team_box_score', self.db_con, schema='nba', index=False, if_exists='append'
-            )
+        pl.concat(dfs).write_database('nba.player_box_score', self.db_con, if_table_exists='append')
+        print('nba.player_box_score have been updated\n\n')
 
-        print('nba.player/team_box_score have been updated\n\n')
+    def get_team_box_score(self):
+        # fmt: off
+        bs_max_dt = (
+            pl.read_database('select max(game_date) from nba.nba_team_box_score_vw where min is not null', self.db_con)
+            .item()
+            .strftime('%Y-%m-%d')
+        )
+        game_ids = pl.read_database(f"SELECT DISTINCT game_id FROM nba.league_game_schedule WHERE game_date > '{bs_max_dt}' AND game_date <= '{self.date_est}'", self.db_con)
+        cols_trad = pl.read_database("select * from util.table_column_order where table_name = 'team_box_score_traditional' order by column_order", self.db_con)
+        cols_adv = pl.read_database("select * from util.table_column_order where table_name = 'team_box_score_advanced' order by column_order", self.db_con)
+        # fmt: on
+
+        print('\n--------------------- nba.team_box_score')
+        dfs = []
+        g_ids = game_ids.get_column('game_id').to_list()
+        for game_id in g_ids:
+            game_id = '00' + str(int(game_id))
+            print(game_id)
+
+            # Traditional stats
+            try:
+                bst = (
+                    pl.from_pandas(
+                        nba_ep.boxscoretraditionalv3.BoxScoreTraditionalV3(
+                            game_id=game_id
+                        ).get_data_frames()[1]
+                    )
+                    .rename(
+                        dict(
+                            zip(
+                                cols_trad.drop_nulls()['origin_name'],
+                                cols_trad.drop_nulls()['column_name'],
+                            )
+                        )
+                    )
+                    .with_columns(cs.string().replace('', None))
+                    .with_columns(pl.col('game_id').cast(pl.Int64))
+                    .with_columns(
+                        pl.col('min').str.replace(r':.*', '').cast(pl.Int64, strict=False)
+                    )
+                    .group_by(['game_id', 'team_id', 'team_abbreviation'])
+                    .agg(cs.numeric().sum())
+                    .with_columns(
+                        [
+                            (pl.col('fgm') / pl.col('fga')).alias('fg_pct'),
+                            (pl.col('fg3_m') / pl.col('fg3_a')).alias('fg3_pct'),
+                            (pl.col('ftm') / pl.col('fta')).alias('ft_pct'),
+                        ]
+                    )
+                )
+
+                bst = (
+                    bst.join_where(
+                        bst.select('game_id', 'team_id', 'pts'),
+                        pl.col('game_id') == pl.col('game_id_t'),
+                        pl.col('team_id') != pl.col('team_id_t'),
+                        suffix='_t',
+                    )
+                    .with_columns((pl.col('pts') - pl.col('pts_t')).alias('plus_minus'))
+                    .select(cols_trad['column_name'].to_list())
+                )
+
+            except Exception as e:
+                print(game_id + ': ' + str(e))
+                # bst = pl.DataFrame({'game_id': [game_id]}).with_columns(pl.col('game_id').cast(pl.Int64))
+                break
+
+            # Advanced stats
+            try:
+                bsa = (
+                    pl.from_pandas(
+                        nba_ep.boxscoreadvancedv3.BoxScoreAdvancedV3(
+                            game_id=game_id
+                        ).get_data_frames()[1]
+                    )
+                    .rename(
+                        dict(
+                            zip(
+                                cols_adv.drop_nulls()['origin_name'],
+                                cols_adv.drop_nulls()['column_name'],
+                            )
+                        )
+                    )
+                    .with_columns(cs.string().replace('', None))
+                    .with_columns(pl.col('game_id').cast(pl.Int64))
+                    .select(cols_adv['column_name'].to_list())
+                )
+            except Exception as e:
+                print(game_id + ': ' + str(e))
+                # bsa = pl.DataFrame({'game_id': [game_id]}).with_columns(pl.col('game_id').cast(pl.Int64))
+                break
+
+            dfs.append(bst.join(bsa, on=['game_id', 'team_id'], how='left'))
+
+        pl.concat(dfs).write_database('nba.team_box_score', self.db_con, if_table_exists='append')
+        print('nba.team_box_score have been updated\n\n')
 
     def update_past_game_schedule(self, season='current'):
         col_order = pl.read_database(

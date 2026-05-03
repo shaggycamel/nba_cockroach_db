@@ -2,7 +2,7 @@ from dataHub import dataHub
 import datetime as dt
 
 
-dh = dataHub('postgre')
+# dh = dataHub('postgre')
 # dh = dataHub('cockroach')
 
 # ---------------------------------- NBA Data
@@ -25,8 +25,11 @@ dh = dataHub('postgre')
 # dh.get_next_game_schedule()
 
 
-# ----- Box Scores - DAILY
-# dh.get_box_score()
+# ----- Team Box Scores - DAILY
+# dh.get_team_box_score()
+
+# ----- Player Box Scores - DAILY
+# dh.get_player_box_score()
 
 
 # ----- Team Roster - DAILY - DONE 2025-26
@@ -63,3 +66,8 @@ dh = dataHub('postgre')
 
 # ----- Fantasy Transactions - DAILY
 # dh.fty_get_recent_activity()
+
+# update in cron job
+# update schedule table
+# push to nuc
+# build docker image
