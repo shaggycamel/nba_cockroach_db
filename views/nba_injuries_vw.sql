@@ -6,7 +6,7 @@ SELECT kd.season,
     inj.matchup,
     inj.team,
     inj.team_slug,
-    nm.nba_name AS player_name,
+    nm.conformed_name AS player_name,
     inj.nba_id,
     inj.status,
     inj.reason

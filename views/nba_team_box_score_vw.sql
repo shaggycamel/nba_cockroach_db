@@ -1,5 +1,6 @@
 CREATE OR REPLACE VIEW nba.nba_team_box_score_vw AS
-SELECT lgs.season,
+SELECT 
+	lgs.season,
     lgs.season_type,
     lgs.matchup,
     lgs.game_date,
@@ -50,4 +51,6 @@ SELECT lgs.season,
     tbs.poss,
     tbs.pie
    FROM nba.team_box_score tbs
-     LEFT JOIN nba.league_game_schedule lgs ON tbs.game_id::double precision = lgs.game_id::double precision;
+     LEFT JOIN nba.league_game_schedule lgs 
+     	ON tbs.game_id::double precision = lgs.game_id::double precision
+     	AND tbs.team_abbreviation = lgs.team

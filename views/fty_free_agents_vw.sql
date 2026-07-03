@@ -16,7 +16,7 @@ LEFT JOIN (
 		'ESPN' AS platform,
 		espn_id AS fantasy_id,
 		nba_id AS player_id,
-		nba_name AS player_name
+		conformed_name AS player_name
 	FROM util.nba_fty_name_match
 	
 	UNION ALL
@@ -25,7 +25,7 @@ LEFT JOIN (
 		'Yahoo' AS platform,
 		yahoo_id AS fantasy_id,
 		nba_id AS player_id,
-		nba_name AS player_name
+		conformed_name AS player_name
 	FROM util.nba_fty_name_match
 	
 ) AS nm ON fa.platform = nm.platform

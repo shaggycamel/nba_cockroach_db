@@ -10,7 +10,7 @@ SELECT
     tr.player_id,
     nm.espn_id,
     nm.yahoo_id,
-    nm.nba_name AS player_name,
+    nm.conformed_name AS player_name,
     COALESCE(inj.reason, pbs.comment) AS inj_reason,
     inj.status AS inj_status,
     pbs.min,
@@ -73,7 +73,31 @@ SELECT
                 ELSE 0
             END) >= 3 THEN 1
             ELSE 0
-        END AS td3
+        END AS td3,
+    pbs.plus_minus,
+	pbs.e_off_rating,
+	pbs.off_rating,
+	pbs.e_def_rating,
+	pbs.def_rating,
+	pbs.e_net_rating,
+	pbs.net_rating,
+	pbs.ast_pct,
+	pbs.ast_tov,
+	pbs.ast_ratio,
+	pbs.oreb_pct,
+	pbs.dreb_pct,
+	pbs.reb_pct,
+	pbs.tov_pct,
+	pbs.efg_pct,
+	pbs.ts_pct,
+	pbs.usg_pct,
+	pbs.e_usg_pct,
+	pbs.e_pace,
+	pbs.pace,
+	pbs.pace_per40,
+	pbs.poss,
+	pbs.pie
+        
    FROM nba.league_game_schedule lgs
      LEFT JOIN ( SELECT tr_inr.season,
             tr_inr.team_slug,

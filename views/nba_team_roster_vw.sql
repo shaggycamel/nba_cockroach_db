@@ -6,7 +6,7 @@ SELECT
   tr.player_id,
   nm.espn_id,
   nm.yahoo_id,
-  nm.nba_name AS player_name,
+  nm.conformed_name AS player_name,
   tr.position,
   tr.how_acquired,
   tr.salary,
