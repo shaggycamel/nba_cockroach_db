@@ -50,6 +50,7 @@ class dataHub:
 
         return sqlalchemy.create_engine(sql_url, connect_args={'connect_timeout': timeout})
 
+
     def get_player_season_stats(self):
         """Season stats (totals)"""
 
@@ -1511,3 +1512,192 @@ class dataHub:
                 fg_pct=pl.col('fgm') / pl.col('fga'), ft_pct=pl.col('ftm') / pl.col('fta')
             )
         )
+
+import asyncio
+import concurrent.futures
+import aiohttp
+
+
+def _run_coro(coro):
+    """
+    Run a coroutine to completion, whether or not an event loop is already
+    running in this thread. Plain scripts / python REPL have no running loop,
+    so asyncio.run() works directly. Interactive consoles built on IPython
+    (Jupyter, Positron) already have one running, which asyncio.run() refuses
+    to nest inside — so in that case, run the coroutine on a separate thread
+    with its own fresh loop instead.
+    """
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        # no loop running here — the normal case
+        return asyncio.run(coro)
+
+    # a loop is already running (e.g. Positron/IPython console) — hand the
+    # coroutine to a new thread that starts its own loop
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+        return pool.submit(asyncio.run, coro).result()
+
+
+class _StatyxClient:
+    """Thin transport layer: pagination + concurrency. No knowledge of specific endpoints."""
+
+    def __init__(self, api_key: str, max_concurrent: int = 10):
+        self.api_key = api_key
+        self.max_concurrent = max_concurrent
+        self.session: aiohttp.ClientSession | None = None
+
+    async def __aenter__(self):
+        connector = aiohttp.TCPConnector(limit=self.max_concurrent)
+        self.session = aiohttp.ClientSession(
+            connector=connector,
+            headers={"x-api-key": self.api_key}
+        )
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        await self.session.close()
+
+    async def get_paginated(self, url: str, params: dict) -> list:
+        """Fetch every page of one list endpoint call."""
+        rows = []
+        offset = 0
+        while True:
+            page_params = {**params, "limit": 200, "offset": offset}
+            async with self.session.get(url, params=page_params) as r:
+                r.raise_for_status()
+                data = (await r.json())["data"]
+            rows.extend(data)
+            if len(data) < 200:  # last page
+                break
+            offset += 200
+        return rows
+
+    async def get_one(self, url: str, params: dict) -> dict:
+        """Fetch a single-object endpoint (no list, no pagination)."""
+        async with self.session.get(url, params=params) as r:
+            r.raise_for_status()
+            return (await r.json())["data"]
+
+    async def get_many(self, calls: list[tuple], paginated: bool = True) -> list:
+        """
+        Run get_paginated (or get_one, if paginated=False) concurrently across many calls.
+        calls: list of (key, url, params). `key` is just a label attached to the
+        result so callers can match it back up — pass None if there's no key.
+        """
+        fetch = self.get_paginated if paginated else self.get_one
+
+        async def fetch_one(key, url, params):
+            try:
+                result = await fetch(url, params)
+                return key, result, None
+            except aiohttp.ClientError as e:
+                return key, None, str(e)
+
+        tasks = [fetch_one(*call) for call in calls]
+        return await asyncio.gather(*tasks)
+
+
+def _flatten_hit_rates(row: dict) -> list[dict]:
+    """
+    hit-rates responses nest per-window stats:
+    {market, line, side, season, sample_size, windows: {L5: {...}, L10: {...}, ...}}
+    Expand into one tidy row per window rather than one wide row per player.
+    """
+    base = {k: v for k, v in row.items() if k != "windows"}
+    return [
+        {**base, "window": window, **stats}
+        for window, stats in row.get("windows", {}).items()
+    ]
+
+
+class StatyxPipeline:
+    """Orchestrates fetch + normalize for downstream nba_mod use.
+
+    Adding a new endpoint is a one-line addition to ENDPOINTS — no new method needed,
+    unless its response needs custom flattening (see "flatten" below).
+    """
+
+    BASE_URL = "https://api.statyx.io/v1/nba"
+
+    ENDPOINTS = {
+        "game_stats":     {"path": "/players/{key}/game-stats",    "keyed": True,  "key_column": "player_id", "paginated": True,  "flatten": None},
+        "shot_zones":     {"path": "/players/{key}/shot-zones",    "keyed": True,  "key_column": "player_id", "paginated": True,  "flatten": None},
+        "hit_rates":      {"path": "/players/{key}/hit-rates",     "keyed": True,  "key_column": "player_id", "paginated": False, "flatten": _flatten_hit_rates},
+        "advanced_stats": {"path": "/players/{key}/advanced-stats","keyed": True,  "key_column": "player_id", "paginated": True,  "flatten": None},
+        "play_types":     {"path": "/players/{key}/play-types",    "keyed": True,  "key_column": "player_id", "paginated": True,  "flatten": None},
+        "schedule":       {"path": "/schedule",                    "keyed": False, "key_column": None,        "paginated": True,  "flatten": None},
+        "standings":      {"path": "/standings",                   "keyed": False, "key_column": None,        "paginated": True,  "flatten": None},
+        "contracts":      {"path": "/contracts",                   "keyed": False, "key_column": None,        "paginated": True,  "flatten": None},
+    }
+
+    def __init__(self, max_concurrent: int = 10):
+        parser = configparser.ConfigParser()
+        parser.read(os.getcwd() + '/database.ini')
+        api_key = dict(parser.items('statyx'))
+        self.api_key = api_key['key']
+        self.max_concurrent = max_concurrent
+        self.errors: dict = {}
+
+    def _url(self, endpoint: str, key=None) -> str:
+        path = self.ENDPOINTS[endpoint]["path"]
+        return self.BASE_URL + path.format(key=key)
+
+    async def _fetch_keyed(self, endpoint: str, keys: list, params: dict) -> list:
+        spec = self.ENDPOINTS[endpoint]
+        async with _StatyxClient(self.api_key, self.max_concurrent) as client:
+            calls = [(key, self._url(endpoint, key), params) for key in keys]
+            return await client.get_many(calls, paginated=spec["paginated"])
+
+    async def _fetch_single(self, endpoint: str, params: dict):
+        spec = self.ENDPOINTS[endpoint]
+        async with _StatyxClient(self.api_key, self.max_concurrent) as client:
+            fetch = client.get_paginated if spec["paginated"] else client.get_one
+            return await fetch(self._url(endpoint), params)
+
+    def run(self, endpoint: str, params: dict | None = None, keys: list | None = None) -> pl.DataFrame:
+        """
+        Sync entry point.
+
+        endpoint: name from ENDPOINTS, e.g. "game_stats"
+        params:   query params, e.g. {"season": 2024}. Some endpoints (e.g. "hit_rates")
+                  have required params — see ENDPOINTS / the API docs for each.
+        keys:     required if the endpoint is keyed (e.g. player_ids); omit otherwise
+
+        On return, self.errors holds any per-key failures ({key: error_message}).
+        """
+        if endpoint not in self.ENDPOINTS:
+            raise ValueError(f"Unknown endpoint '{endpoint}'. Options: {list(self.ENDPOINTS)}")
+
+        spec = self.ENDPOINTS[endpoint]
+        params = params or {}
+        self.errors = {}
+        flatten = spec["flatten"]
+
+        if spec["keyed"]:
+            if not keys:
+                raise ValueError(f"'{endpoint}' requires `keys` (e.g. player_ids)")
+
+            results = _run_coro(self._fetch_keyed(endpoint, keys, params))
+            key_column = spec["key_column"]
+
+            rows = []
+            for key, data, err in results:
+                if err is not None:
+                    self.errors[key] = err
+                    continue
+
+                # data is a list of rows if paginated, a single dict otherwise
+                records = data if spec["paginated"] else [data]
+                for row in records:
+                    expanded = flatten(row) if flatten else [row]
+                    for r in expanded:
+                        rows.append({key_column: key, **r})
+        else:
+            data = _run_coro(self._fetch_single(endpoint, params))
+            records = data if spec["paginated"] else [data]
+            rows = []
+            for row in records:
+                rows.extend(flatten(row) if flatten else [row])
+
+        return pl.DataFrame(rows) if rows else pl.DataFrame()

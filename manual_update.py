@@ -1,9 +1,20 @@
 from dataHub import dataHub
+from dataHub import StatyxPipeline
 import datetime as dt
 
 
-# dh = dataHub('postgre')
-dh = dataHub('cockroach')
+dh = dataHub('postgre')
+# dh = dataHub('cockroach')
+
+
+stx = StatyxPipeline()
+
+plid = stx.run("contracts").get_column('player_id').to_list()
+
+stx.run("hit_rates", {"market": "pra", "line": 42.5}, keys=[1000115, 1000116])
+
+# "hit_rates":    
+
 
 # ---------------------------------- NBA Data
 
