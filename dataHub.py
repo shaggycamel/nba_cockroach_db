@@ -82,9 +82,7 @@ class dataHub:
         )
 
         # Write to database
-        df.to_pandas().to_sql(
-            'player_season_stats', self.db_con, schema='nba', index=False, if_exists='append'
-        )
+        df.write_database('nba.player_season_stats', self.db_con, if_table_exists='append')
         print('nba.player_season_stats has been updated\n\n')
 
     def get_player_info(self):
@@ -133,9 +131,7 @@ class dataHub:
         )
 
         # Write to database
-        df.to_pandas().to_sql(
-            'player_info', self.db_con, schema='nba', index=False, if_exists='append'
-        )
+        df.write_database('nba.player_info', self.db_con, if_table_exists='append')
         print('nba.player_info has been updated\n\n')
 
     def get_team_injuries(self, force_date=None):
@@ -217,9 +213,7 @@ class dataHub:
         db_ex.commit()
 
         # Write to database
-        df.to_pandas().to_sql(
-            'injuries', self.db_con, schema='nba', index=False, if_exists='append'
-        )
+        df.write_database('nba.injuries', self.db_con, if_table_exists='append')
         print('nba.injuries has been updated\n\n')
 
     def get_team_injuries_old(self):
@@ -443,9 +437,7 @@ class dataHub:
         db_ex.commit()
 
         # Write to database
-        df.to_pandas().to_sql(
-            'injuries', self.db_con, schema='nba', index=False, if_exists='append'
-        )
+        df.write_database('nba.injuries', self.db_con, if_table_exists='append')
         print('nba.injuries has been updated\n\n')
 
     def get_player_box_score(self):
@@ -703,9 +695,7 @@ class dataHub:
         )
         db_ex.commit()
 
-        df.to_pandas().to_sql(
-            'league_game_schedule', self.db_con, schema='nba', index=False, if_exists='append'
-        )
+        df.write_database('nba.league_game_schedule', self.db_con, if_table_exists='append')
         print('nba.historical_game_schedule has been updated\n\n')
 
     def get_next_game_schedule(self):
@@ -795,9 +785,7 @@ class dataHub:
         )
 
         # Write to database
-        df.to_pandas().to_sql(
-            'league_game_schedule', self.db_con, schema='nba', index=False, if_exists='append'
-        )
+        df.write_database('nba.league_game_schedule', self.db_con, if_table_exists='append')
         print('nba.current_game_schedule has been updated\n\n')
 
     def get_team_roster(self, pre_season=False):
@@ -839,9 +827,7 @@ class dataHub:
 
         # Write to database depending on situation
         if pre_season:
-            df.to_pandas().to_sql(
-                'team_roster', self.db_con, schema='nba', index=False, if_exists='append'
-            )
+            df.write_database('nba.team_roster', self.db_con, if_table_exists='append')
             print('nba.team_roster has been updated\n\n')
         else:
             df_existing = pl.read_database(
@@ -887,9 +873,7 @@ class dataHub:
                 )
                 db_ex.commit()
 
-                df_traded.to_pandas().to_sql(
-                    'team_roster', self.db_con, schema='nba', index=False, if_exists='append'
-                )
+                df_traded.write_database('nba.team_roster', self.db_con, if_table_exists='append')
                 print('nba.team_roster traded players have been updated\n\n')
             else:
                 print('nba.team_roster: nothing to update\n\n')
@@ -964,9 +948,7 @@ class dataHub:
                 dfs.append(self._yahoo_get_free_agents(self.fty_con[con]))
 
         # Write to database
-        pl.concat(dfs).to_pandas().to_sql(
-            'free_agents', self.db_con, schema='fty', index=False, if_exists='append'
-        )
+        pl.concat(dfs).write_database('fty.free_agents', self.db_con, if_table_exists='append')
         print('fty.free_agents has been updated\n\n')
 
     def _espn_get_free_agents(self, espn_con):
@@ -1038,9 +1020,7 @@ class dataHub:
                 dfs.append(self._yahoo_get_league_competitor(self.fty_con[con]))
 
         # Write to database
-        pl.concat(dfs).to_pandas().to_sql(
-            'league_competitor', self.db_con, schema='fty', index=False, if_exists='append'
-        )
+        pl.concat(dfs).write_database('fty.league_competitor', self.db_con, if_table_exists='append')
         print('\nfty.league_competitor has been updated\n\n')
 
     def _espn_get_league_competitor(self, espn_con):
@@ -1094,9 +1074,7 @@ class dataHub:
                 dfs.append(self._yahoo_get_league_matchup(self.fty_con[con]))
 
         # Write to database
-        pl.concat(dfs).to_pandas().to_sql(
-            'league_matchup', self.db_con, schema='fty', index=False, if_exists='append'
-        )
+        pl.concat(dfs).write_database('fty.league_matchup', self.db_con, if_table_exists='append')
         print('fty.league_matchup has been updated\n\n')
 
     def _espn_get_league_matchup(self, espn_con):
@@ -1250,9 +1228,7 @@ class dataHub:
         )
 
         # Write to database
-        df.to_pandas().to_sql(
-            'competitor_roster', self.db_con, schema='fty', index=False, if_exists='append'
-        )
+        df.write_database('fty.competitor_roster', self.db_con, if_table_exists='append')
         print('fty.competitor_roster has been updated\n\n')
 
     def _espn_get_competitor_roster(self, espn_con):
@@ -1316,9 +1292,7 @@ class dataHub:
                 dfs.append(self._yahoo_get_recent_activity(self.fty_con[con]))
 
         # Write to database
-        pl.concat(dfs).to_pandas().to_sql(
-            'recent_activity', self.db_con, schema='fty', index=False, if_exists='append'
-        )
+        pl.concat(dfs).write_database('fty.recent_activity', self.db_con, if_table_exists='append')
         print('fty.recent_activity has been updated\n\n')
 
     def _espn_get_recent_activity(self, espn_con):
@@ -1397,9 +1371,7 @@ class dataHub:
             db_ex.commit()
 
             # Write to database
-            df.to_pandas().to_sql(
-                'matchup_box_score', self.db_con, schema='fty', index=False, if_exists='append'
-            )
+            df.write_database('fty.matchup_box_score', self.db_con, if_table_exists='append')
             print(con + ' fty.matchup_box_score has been updated\n\n')
 
     def _espn_get_matchup_box_score(self, espn_con):
@@ -1513,6 +1485,8 @@ class dataHub:
             )
         )
 
+
+
 import asyncio
 import concurrent.futures
 import aiohttp
@@ -1611,7 +1585,7 @@ def _flatten_hit_rates(row: dict) -> list[dict]:
     ]
 
 
-class StatyxPipeline:
+class StatyxData:
     """Orchestrates fetch + normalize for downstream nba_mod use.
 
     Adding a new endpoint is a one-line addition to ENDPOINTS — no new method needed,
@@ -1638,6 +1612,7 @@ class StatyxPipeline:
         self.api_key = api_key['key']
         self.max_concurrent = max_concurrent
         self.errors: dict = {}
+        self.player_ids = self._run("contracts").get_column('player_id').to_list()
 
     def _url(self, endpoint: str, key=None) -> str:
         path = self.ENDPOINTS[endpoint]["path"]
@@ -1655,7 +1630,7 @@ class StatyxPipeline:
             fetch = client.get_paginated if spec["paginated"] else client.get_one
             return await fetch(self._url(endpoint), params)
 
-    def run(self, endpoint: str, params: dict | None = None, keys: list | None = None) -> pl.DataFrame:
+    def _run(self, endpoint: str, params: dict | None = None) -> pl.DataFrame:
         """
         Sync entry point.
 
@@ -1675,10 +1650,10 @@ class StatyxPipeline:
         flatten = spec["flatten"]
 
         if spec["keyed"]:
-            if not keys:
+            if not self.player_ids:
                 raise ValueError(f"'{endpoint}' requires `keys` (e.g. player_ids)")
 
-            results = _run_coro(self._fetch_keyed(endpoint, keys, params))
+            results = _run_coro(self._fetch_keyed(endpoint, self.player_ids, params))
             key_column = spec["key_column"]
 
             rows = []
@@ -1701,3 +1676,17 @@ class StatyxPipeline:
                 rows.extend(flatten(row) if flatten else [row])
 
         return pl.DataFrame(rows) if rows else pl.DataFrame()
+
+
+    def get_advanced_stats(self, db_con):
+        max_dt = pl.read_database('select max(game_date) from statyx.advanced_stats', db_con)['max'][0]
+        df = (
+            self._run('advanced_stats', {'since': (max_dt + dt.timedelta(1)).strftime('%Y-%m-%d')})
+            .with_columns(cs.ends_with("_date").str.to_datetime(format="%Y-%m-%dT%H:%M:%S%.fZ").dt.date())
+            .with_columns((cs.string() - cs.ends_with("_date")).cast(pl.Float64, strict=False))
+        )
+
+        df.write_database('statyx.advanced_stats', db_con, if_table_exists='append')
+        print("Statyx advanced stats updated")
+
+        
