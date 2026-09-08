@@ -1,4 +1,5 @@
 CREATE OR REPLACE view fty.fty_matchup_box_score_vw AS
+
 SELECT bs.season,
     bs.platform,
     bs.league_id,

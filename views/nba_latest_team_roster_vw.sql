@@ -24,7 +24,7 @@ WITH cte_latest_team_roster AS (
                     tr.exit_date,
                     row_number() OVER (PARTITION BY tr.season, tr.player_id ORDER BY tr.entry_date DESC) AS rn
                    FROM nba.team_roster tr
-                     LEFT JOIN util.nba_fty_name_match nm ON tr.player_id = nm.nba_id::double precision) inner_q
+                     LEFT JOIN util.conformed_player_id nm ON tr.player_id = nm.nba_id::double precision) inner_q
           WHERE inner_q.rn = 1
         )
  SELECT cte_latest_team_roster.season,
@@ -39,4 +39,4 @@ WITH cte_latest_team_roster AS (
     id_match.yahoo_id,
     cte_latest_team_roster.how_acquired
    FROM cte_latest_team_roster
-     LEFT JOIN util.nba_fty_name_match id_match ON cte_latest_team_roster.player_id = id_match.nba_id::double precision;
+     LEFT JOIN util.conformed_player_id id_match ON cte_latest_team_roster.player_id = id_match.nba_id::double precision;

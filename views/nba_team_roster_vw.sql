@@ -1,4 +1,5 @@
 CREATE OR REPLACE VIEW nba.nba_team_roster_vw AS
+
 SELECT 
   tr.season,
   tr.team_id,
@@ -14,5 +15,5 @@ SELECT
   COALESCE(tr.exit_date, kd.end_date) AS exit_date
 
 FROM nba.team_roster AS tr
-LEFT JOIN util.nba_fty_name_match AS nm ON tr.player_id = nm.nba_id
+LEFT JOIN util.conformed_player_id AS nm ON tr.player_id = nm.nba_id
 LEFT JOIN (SELECT * FROM nba.key_dates WHERE season_type = 'Regular Season') AS kd ON tr.season = kd.season

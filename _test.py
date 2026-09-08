@@ -1,6 +1,5 @@
 
 from sports_hub import SportsHub
-
 import polars as pl
 
 hub = SportsHub(db_con = 'postgres')

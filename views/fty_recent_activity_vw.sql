@@ -1,4 +1,5 @@
 CREATE OR REPLACE VIEW fty.fty_recent_activity_vw AS
+
 SELECT 
 	activity.season,
 	activity.platform,
@@ -9,6 +10,7 @@ SELECT
 	activity.player,
 	activity.action,
 	activity.timestamp
+	
 FROM fty.recent_activity AS activity
 
 LEFT JOIN fty.league as lgl ON activity.season = lgl.season

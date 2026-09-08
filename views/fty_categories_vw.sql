@@ -1,4 +1,5 @@
 CREATE OR REPLACE VIEW fty.fty_categories_vw AS
+
 SELECT fty_cat.platform,
     fty_cat.season,
     fty_cat.league_id,
