@@ -1,11 +1,29 @@
 from sports_hub import SportsHub
+import polars as pl
 import datetime as dt
 
-hub = SportsHub(db_con = 'postgres')
-# hub = SportsHub(db_con = 'cockroach')
+# hub = SportsHub(db_con = 'postgres')
+hub = SportsHub(db_con = 'cockroach')
+
+qry = f"""
+    select lg.*, pf.credentials 
+    from fty.customer_league as lg
+    left join fty.customer_platform as pf on lg.customer_id = pf.customer_id
+        and lg.platform = pf.platform
+    where season = '{hub.ctx.cur_season}'
+"""
+
+leagues = (
+    hub.db.read(qry)
+    .group_by('league_id')
+    .first(ignore_nulls=True)
+)
+
+hub.fty.connect_leagues(leagues=leagues)
 
 
 # ---------------------------------- NBA Data
+# STILL NEED TO DO THIS FOR 2026-27
 
 # ---- Player Season Stats
 # hub.nba.get_player_box_score()
@@ -31,23 +49,25 @@ hub = SportsHub(db_con = 'postgres')
 
 
 # ----- Team Roster - DAILY
-# Also comprises of updating salaries. Look at player_salaries.py - Eventually coportate this file into dataHub
 # hub.nba.get_team_roster(pre_season=True) # <--- Run this one if updating prior to season
 # hub.nba.get_team_roster()
 
 
 # ---------------------------------- Fantasy Data
+# Done manually:
+# League matchup dates
+# League byes
 
 # ----- League
-# hub.fty.get_league()
+hub.fty.get_league()
 
 
 # ----- League Categories
-# hub.fty.get_league_categories()
+hub.fty.get_league_categories()
 
 
 # ----- League Competitors
-# hub.fty.get_league_competitor()
+hub.fty.get_league_competitor()
 
 
 # ----- Free Agents - DAILY
@@ -59,11 +79,7 @@ hub = SportsHub(db_con = 'postgres')
 
 
 # ----- Fantasy Matchup
-# hub.fty.get_league_matchup()
-
-
-# ----- Fantasy Matchup dates
-# hub.fty.get_league_matchup_dates()
+hub.fty.get_league_matchup()
 
 
 # ----- Matchup box scores - DAILY
