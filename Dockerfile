@@ -1,37 +1,34 @@
-# Use an official Python runtime as a parent image
-FROM python:3.11-slim
+# ---- build stage: compilers + git are only needed to install deps
+# (psycopg2 builds from source; sports-hub is installed from GitHub)
+FROM python:3.12-slim AS build
 
-# Set environment variables
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV PYTHONUNBUFFERED=1
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
-# Install system dependencies
-# 1. default-jre is required for tabula-py (Java)
-# 2. build-essential and gcc for sqlalchemy/pandas if needed
-# 3. libgomp1 is often needed for high-performance Polars operations
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    tzdata \
-    default-jre \
-    build-essential \
-    gcc \
-    libgomp1 \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends build-essential libpq-dev git \
+ && rm -rf /var/lib/apt/lists/*
 
-# Set the working directory in the container
 WORKDIR /app
+COPY pyproject.toml uv.lock* ./
+RUN uv sync --no-dev --no-install-project
 
-# 1. Copy the requirements file from your Mac to the container
-COPY requirements.txt .
+# ---- runtime stage
+FROM python:3.12-slim
 
-# Install Python dependencies
-# We use a single RUN command to keep the image layer count low
-RUN pip install --no-cache-dir -r requirements.txt
+# libpq5: psycopg2 runtime. tzdata: ZoneInfo (NZ / US Eastern).
+# default-jre-headless: tabula-py (used by the injuries scrape) shells out to Java.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends libpq5 tzdata default-jre-headless \
+ && rm -rf /var/lib/apt/lists/*
 
-# Copy the rest of your application code
-COPY . .
+WORKDIR /app
+COPY --from=build /app/.venv /app/.venv
+COPY __main__.py .
 
-# Command to run your script (assuming your main script is main.py)
-# ENTRYPOINT allows you to pass arguments like 'argv' easily
-ENTRYPOINT ["python", "."]
+ENV PATH="/app/.venv/bin:$PATH" \
+    PYTHONUNBUFFERED=1
 
+# credentials.ini is NOT in the image: mount it at /app/credentials.ini
+# (sports-hub reads it from the working directory).
+# Exec form so `docker run <image> tbl_a,tbl_b` reaches __main__.py as argv[1].
+ENTRYPOINT ["python", "__main__.py"]

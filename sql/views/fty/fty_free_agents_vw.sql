@@ -1,4 +1,5 @@
 CREATE OR REPLACE VIEW fty.fty_free_agents_vw AS
+
 SELECT 
 	fa.season,
 	fa.platform,
@@ -17,7 +18,7 @@ LEFT JOIN (
 		espn_id AS fantasy_id,
 		nba_id AS player_id,
 		conformed_name AS player_name
-	FROM util.nba_fty_name_match
+	FROM util.conformed_player_id
 	
 	UNION ALL
 	
@@ -26,7 +27,7 @@ LEFT JOIN (
 		yahoo_id AS fantasy_id,
 		nba_id AS player_id,
 		conformed_name AS player_name
-	FROM util.nba_fty_name_match
+	FROM util.conformed_player_id
 	
 ) AS nm ON fa.platform = nm.platform
 	AND fa.player_id = nm.fantasy_id

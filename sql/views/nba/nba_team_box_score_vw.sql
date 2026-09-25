@@ -1,4 +1,5 @@
 CREATE OR REPLACE VIEW nba.nba_team_box_score_vw AS
+
 SELECT 
 	lgs.season,
     lgs.season_type,

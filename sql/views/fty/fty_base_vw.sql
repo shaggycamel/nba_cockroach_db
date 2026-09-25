@@ -1,4 +1,5 @@
 create or replace view fty.fty_base_vw as
+
 SELECT lc.season,
     lc.platform,
     lc.league_id,

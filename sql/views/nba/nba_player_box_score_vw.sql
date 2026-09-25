@@ -1,4 +1,5 @@
 CREATE OR REPLACE VIEW nba.nba_player_box_score_vw AS
+
 SELECT
 	lgs.season,
     lgs.season_type,
@@ -114,5 +115,5 @@ SELECT
      -- need game_date in join to stop duplication
      LEFT JOIN nba.injuries inj ON lgs.game_id = inj.game_id AND lgs.game_date = inj.game_date AND tr.player_id = inj.nba_id
      LEFT JOIN nba.player_box_score pbs ON lgs.game_id = pbs.game_id AND tr.player_id = pbs.player_id::double precision
-     LEFT JOIN util.nba_fty_name_match AS nm ON tr.player_id = nm.nba_id
+     LEFT JOIN util.conformed_player_id AS nm ON tr.player_id = nm.nba_id
 

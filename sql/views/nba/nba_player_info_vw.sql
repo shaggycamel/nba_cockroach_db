@@ -1,4 +1,5 @@
 create or replace view nba.nba_player_info_vw as
+
 SELECT player_info.season,
     player_info.player_id,
     player_info.first_name,
