@@ -15,9 +15,18 @@ It runs as a Docker container, once per cron job, on a single always-on host (th
 
 ## Configuration
 
-Everything lives in one file, `credentials.ini`, read from the working directory — the
-same file sports-hub reads for its DB and platform credentials. Copy
-[credentials.ini.example](credentials.ini.example) and fill it in. Never commit it.
+Everything lives in one file, `credentials.ini` in the repo root — the same file sports-hub
+reads for its DB and platform credentials. Copy
+[credentials.ini.example](credentials.ini.example) and fill it in. Never commit it
+(`.gitignore` covers it).
+
+`cron.sh` resolves it relative to its own location rather than the caller's working
+directory, so cron needs no `PATH`, `cd` or environment setup. A direct
+`python __main__.py` reads it from the current working directory, so run that from the
+repo root too.
+
+Note that `git clean -fdx` deletes ignored files and would therefore remove it. Plain
+`git clean -fd` is safe.
 
 | Section    | Key        | Env override    | Purpose                                     |
 | ---------- | ---------- | --------------- | ------------------------------------------- |
@@ -39,11 +48,9 @@ The image is built on the NUC itself — native amd64, no registry, and no crede
 leave the box.
 
 ```bash
-# 1. one-off: the config directory, outside the repo
-mkdir -p ~/.config/nba_cockroach_db && chmod 700 ~/.config/nba_cockroach_db
-cp credentials.ini.example ~/.config/nba_cockroach_db/credentials.ini
-chmod 600 ~/.config/nba_cockroach_db/credentials.ini
-$EDITOR ~/.config/nba_cockroach_db/credentials.ini   # real creds, db_con = cockroach
+# 1. one-off: the config file, in the repo root
+cp credentials.ini.example credentials.ini && chmod 600 credentials.ini
+$EDITOR credentials.ini            # real creds, db_con = cockroach
 
 # 2. build (repeat after every git pull)
 cd ~/git/nba_cockroach_db && git pull
@@ -61,9 +68,13 @@ secret is in the image. It keeps the container after the run (no `--rm`) so
 Crontab — cron has no `PATH`, which is why `cron.sh` sets one:
 
 ```cron
-0  3 * * *  /home/<user>/git/nba_cockroach_db/cron.sh
-0 */6 * * * /home/<user>/git/nba_cockroach_db/cron.sh nba_injuries
+0  3 * * *  /home/oli/github/nba_cockroach_db/cron.sh >> /home/oli/github/nba_cockroach_db/cron.log 2>&1
+0 */6 * * * /home/oli/github/nba_cockroach_db/cron.sh nba_injuries >> /home/oli/github/nba_cockroach_db/cron.log 2>&1
 ```
+
+No environment setup needed — `cron.sh` finds `credentials.ini` in its own directory. The
+redirect captures the wrapper's output; the container's own logs are also available via
+`docker logs update_tables` until the next run.
 
 Run frequency is otherwise driven from the database: `util.update_schedule.pause`
 controls what a bare `./cron.sh` picks up.
