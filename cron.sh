@@ -2,9 +2,10 @@
 # Usage: ./cron.sh                 -> all unpaused tables in util.update_schedule
 #        ./cron.sh tbl_a,tbl_b     -> only those table_names
 #
-# Secrets live outside the repo, in $CONFIG_DIR (chmod 700 dir, chmod 600 files):
-#   $CONFIG_DIR/credentials.ini    sports-hub DB / platform credentials
-#   $CONFIG_DIR/.env               DB_CON, SMTP_USER, SMTP_PASSWORD (see env.example)
+# All configuration lives in a single file outside the repo (chmod 700 dir, chmod 600 file):
+#   $CONFIG_DIR/credentials.ini    DB / platform credentials, [runtime] db_con, [smtp] alerts
+# See credentials.ini.example in the repo. It is bind-mounted read-only at
+# /app/credentials.ini, which is where sports-hub and __main__.py both read it from.
 
 export PATH=/usr/local/bin:/usr/bin:/bin
 
@@ -17,19 +18,16 @@ if ! docker info >/dev/null 2>&1; then
     exit 1
 fi
 
-for f in credentials.ini .env; do
-    if [ ! -f "$CONFIG_DIR/$f" ]; then
-        echo "Missing $CONFIG_DIR/$f"
-        exit 1
-    fi
-done
+if [ ! -f "$CONFIG_DIR/credentials.ini" ]; then
+    echo "Missing $CONFIG_DIR/credentials.ini -- copy credentials.ini.example and fill it in."
+    exit 1
+fi
 
 docker pull -q "$IMAGE_NAME" >/dev/null 2>&1 || echo 'docker pull failed; using local image'
 
 # Container is kept after the run (no --rm) so `docker logs` works until the next run.
 docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1
 docker run --name "$CONTAINER_NAME" \
-    --env-file "$CONFIG_DIR/.env" \
     -v "$CONFIG_DIR/credentials.ini:/app/credentials.ini:ro" \
     "$IMAGE_NAME" "$@"
 status=$?

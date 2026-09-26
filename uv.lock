@@ -1462,7 +1462,7 @@ wheels = [
 [[package]]
 name = "sports-hub"
 version = "0.1.0"
-source = { git = "https://github.com/shaggycamel/sports-hub.git#aa400a29548ca666d7838c5ad0cf942f4b849f2c" }
+source = { git = "https://github.com/shaggycamel/sports-hub.git#be1b582ef0ce4297fc3a10c0ae26defc14980788" }
 dependencies = [
     { name = "aiohttp" },
     { name = "beautifulsoup4" },
