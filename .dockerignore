@@ -1,17 +1,25 @@
 .git
 .gitignore
+.DS_Store
 venv
 .venv
 __pycache__
 *.pyc
+
+# secrets: credentials.ini is bind-mounted at runtime, never baked in
 credentials.ini
+credentials.ini.example
 database.ini
 *.env
 .env*
-env.example
+
+# not needed at runtime
 *.ipynb
 *.csv
 *.sql
-_manual_update.py
+scripts
+sql
 cron.sh
 Dockerfile
+README.md
+ruff.toml

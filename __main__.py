@@ -5,15 +5,23 @@ Usage:
     python __main__.py tbl_a,tbl_b          # only these table_names (alt-frequency runs)
     (interactive consoles: '-f <kernel file>' in argv is ignored)
 
-Environment:
-    DB_CON         credentials.ini section to write to: 'postgres' or 'cockroach' (required)
-    SMTP_USER      Gmail address used to send failure alerts (optional)
-    SMTP_PASSWORD  Gmail app password (optional)
-    ALERT_TO       alert recipient, defaults to SMTP_USER (optional)
+Configuration lives in credentials.ini, read from the working directory (the same file
+sports-hub reads for its DB and platform credentials). Each setting can be overridden by
+an environment variable, which wins when set:
 
-credentials.ini is read from the working directory by sports-hub.
+    [runtime]
+    db_con = cockroach      # DB_CON        section to write to: 'postgres' or 'cockroach'
+
+    [smtp]                  # all optional; without user+password, failure email is skipped
+    user = ...              # SMTP_USER     Gmail address alerts are sent from
+    password = ...          # SMTP_PASSWORD Gmail app password
+    to = ...                # ALERT_TO      recipient, defaults to user
+
+See credentials.ini.example. In the container this file is bind-mounted at
+/app/credentials.ini; nothing secret is baked into the image.
 """
 
+import configparser
 import logging
 import os
 import sys
@@ -24,8 +32,8 @@ from zoneinfo import ZoneInfo
 from polars import DataFrame
 from sports_hub import SportsHub
 
-try:  # dev-only convenience: python-dotenv isn't installed in the image
-    from dotenv import load_dotenv
+try:  # escape hatch: a ./.env still works if you keep one. The image is never given one
+    from dotenv import load_dotenv  # (.dockerignore excludes .env*), so this is a no-op there.
 
     load_dotenv()  # reads ./.env; never overrides variables that are already set
 except ImportError:
@@ -38,12 +46,27 @@ logging.basicConfig(
 log = logging.getLogger('nba_cockroach_db')
 
 NZ = ZoneInfo('Pacific/Auckland')
-DB_CON = os.environ.get('DB_CON')
+
+INI_PATH = os.path.join(os.getcwd(), 'credentials.ini')
+_ini = configparser.ConfigParser()
+_ini.read(INI_PATH)  # a missing file is not an error: every lookup then falls through
+
+
+def setting(env_name, section, key, default=None):
+    """Read one setting: environment variable first, then credentials.ini.
+
+    Env wins so a cron --env-file or os.environ['DB_CON'] = 'postgres' in an
+    interactive console can override whatever the ini says.
+    """
+    return os.environ.get(env_name) or _ini.get(section, key, fallback=default)
+
+
+DB_CON = setting('DB_CON', 'runtime', 'db_con')
 if not DB_CON:
     raise RuntimeError(
-        "DB_CON is not set. Set it to a credentials.ini section, e.g. "
-        "DB_CON=cockroach in the shell, or os.environ['DB_CON'] = 'postgres' "
-        "in an interactive session before running this."
+        f"No database connection configured. Add a [runtime] section with "
+        f"db_con = cockroach (or postgres) to {INI_PATH}, or set DB_CON in the "
+        "environment. Either must name a section of that same file."
     )
 
 hub = SportsHub(db_con=DB_CON)
@@ -93,10 +116,10 @@ def connect_leagues():
 
 
 def send_alert(failures):
-    user = os.environ.get('SMTP_USER')
-    password = os.environ.get('SMTP_PASSWORD')
+    user = setting('SMTP_USER', 'smtp', 'user')
+    password = setting('SMTP_PASSWORD', 'smtp', 'password')
     if not (user and password):
-        log.warning('SMTP_USER / SMTP_PASSWORD not set; skipping failure email')
+        log.warning('no smtp user/password configured; skipping failure email')
         return
 
     body = ','.join(t for t, _ in failures) + '\n\n'
@@ -107,7 +130,9 @@ def send_alert(failures):
         with SMTP('smtp.gmail.com', 587) as server:
             server.starttls()
             server.login(user, password)
-            server.sendmail(user, os.environ.get('ALERT_TO', user), f'Subject: nba-data-mgmt\n\n{body}')
+            # `or user` also covers a present-but-empty 'to =' in the ini
+            recipient = setting('ALERT_TO', 'smtp', 'to') or user
+            server.sendmail(user, recipient, f'Subject: nba-data-mgmt\n\n{body}')
     except Exception:
         log.exception('could not send failure email')
 
