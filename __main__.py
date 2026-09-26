@@ -126,13 +126,17 @@ def send_alert(failures):
     for table, error in failures:
         body += f'{table}\n{error}\n\n'
 
+    # `or user` also covers a present-but-empty 'to =' in the ini
+    recipient = setting('ALERT_TO', 'smtp', 'to') or user
+    # From/To headers as well as envelope addresses: with only a Subject the mail shows
+    # no visible recipient in the client and scores worse with spam filters.
+    msg = f'From: {user}\nTo: {recipient}\nSubject: nba-data-mgmt\n\n{body}'
+
     try:
         with SMTP('smtp.gmail.com', 587) as server:
             server.starttls()
             server.login(user, password)
-            # `or user` also covers a present-but-empty 'to =' in the ini
-            recipient = setting('ALERT_TO', 'smtp', 'to') or user
-            server.sendmail(user, recipient, f'Subject: nba-data-mgmt\n\n{body}')
+            server.sendmail(user, recipient, msg)
     except Exception:
         log.exception('could not send failure email')
 
