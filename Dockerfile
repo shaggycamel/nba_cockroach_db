@@ -14,7 +14,10 @@ WORKDIR /app
 # No glob on uv.lock: a missing lock must fail the build, not silently re-resolve.
 COPY pyproject.toml uv.lock ./
 # --locked fails if the lock is out of date with pyproject, rather than updating it.
-RUN uv sync --no-dev --no-install-project --locked
+# --compile-bytecode writes .pyc at build time. Without it every `docker run` recompiles
+# in a throwaway container, which both slows startup and re-emits third-party
+# SyntaxWarnings (rauth, stringcase) into the cron log on every single run.
+RUN uv sync --no-dev --no-install-project --locked --compile-bytecode
 
 # ---- runtime stage
 FROM python:3.12-slim
