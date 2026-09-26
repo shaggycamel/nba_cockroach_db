@@ -6,16 +6,24 @@ Usage:
     (interactive consoles: '-f <kernel file>' in argv is ignored)
 
 Configuration lives in credentials.ini, read from the working directory (the same file
-sports-hub reads for its DB and platform credentials). Each setting can be overridden by
-an environment variable, which wins when set:
+sports-hub reads for its DB and platform credentials):
 
     [runtime]
-    db_con = cockroach      # DB_CON        section to write to: 'postgres' or 'cockroach'
+    db_con = cockroach
 
-    [smtp]                  # all optional; without user+password, failure email is skipped
-    user = ...              # SMTP_USER     Gmail address alerts are sent from
-    password = ...          # SMTP_PASSWORD Gmail app password
-    to = ...                # ALERT_TO      recipient, defaults to user
+    [smtp]
+    user = alerts@gmail.com
+    password = <gmail app password>
+    to =
+
+[runtime] db_con names which section of that same file to write to. [smtp] is optional:
+without user and password the failure email is skipped, and an empty 'to' sends to 'user'.
+
+Each setting can be overridden by an environment variable, which wins when set: DB_CON,
+SMTP_USER, SMTP_PASSWORD, ALERT_TO.
+
+Whitespace around '=' is optional, but note that configparser does not treat '#' after a
+value as a comment -- it becomes part of the value. Keep comments on their own lines.
 
 See credentials.ini.example. In the container this file is bind-mounted at
 /app/credentials.ini; nothing secret is baked into the image.
