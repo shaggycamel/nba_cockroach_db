@@ -4,6 +4,10 @@ database.ini
 .env
 .env.*
 
+# cron output, when the repo dir doubles as the deploy dir on the NUC
+cron.log
+*.log
+
 # python
 .venv/
 venv/
