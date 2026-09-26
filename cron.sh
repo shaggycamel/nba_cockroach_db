@@ -9,7 +9,8 @@
 
 export PATH=/usr/local/bin:/usr/bin:/bin
 
-IMAGE_NAME='shaggycamel/nba_cockroach_db:latest'
+# Built locally on this host (see README) -- no registry, so no pull.
+IMAGE_NAME='nba_cockroach_db:latest'
 CONTAINER_NAME='update_tables'
 CONFIG_DIR="${NBA_CONFIG_DIR:-$HOME/.config/nba_cockroach_db}"
 
@@ -23,7 +24,11 @@ if [ ! -f "$CONFIG_DIR/credentials.ini" ]; then
     exit 1
 fi
 
-docker pull -q "$IMAGE_NAME" >/dev/null 2>&1 || echo 'docker pull failed; using local image'
+if ! docker image inspect "$IMAGE_NAME" >/dev/null 2>&1; then
+    echo "Image '$IMAGE_NAME' not found. Build it first:"
+    echo "  cd $(cd "$(dirname "$0")" && pwd) && git pull && docker build -t $IMAGE_NAME ."
+    exit 1
+fi
 
 # Container is kept after the run (no --rm) so `docker logs` works until the next run.
 docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1
