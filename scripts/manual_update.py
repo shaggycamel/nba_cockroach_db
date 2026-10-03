@@ -1,10 +1,10 @@
 from sports_hub import SportsHub
 
-hub = SportsHub(db_con='postgres', sport='nba')
+# Reads SPORTS_HUB_CREDENTIALS or ~/.config/sports-hub-credentials.ini by default.
+hub = SportsHub('postgres')
 
 # Order is deliberate: nba's box scores take their game list from
 # league_game_schedule, and fty's matchup box score reads nba.player_box_score.
-
 
 # ============================ nba ============================================
 hub.nba.get_game_schedule()
@@ -61,4 +61,4 @@ hub.fty.get_league_byes()
 # ============================ util ============================================
 # Check the backlog. If non-empty, resolve it with funciton.
 # SELECT platform, count(*) FROM util.unmatched_player_source_vw GROUP BY 1;
-# hub.utility.conform_player_ids(db, ctx.cur_season)
+# hub.util.conform_player_ids()

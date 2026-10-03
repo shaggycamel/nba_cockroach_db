@@ -2,12 +2,13 @@
 # Usage: ./cron.sh                 -> all unpaused tables in util.update_schedule
 #        ./cron.sh tbl_a,tbl_b     -> only those table_names
 #
-# All configuration lives in credentials.ini (chmod 600) next to this script, in the repo
-# root: DB / platform credentials, [runtime] db_con, [smtp] alerts. See
-# credentials.ini.example. It is bind-mounted read-only at /app/credentials.ini, which is
-# where sports-hub and __main__.py both read it from.
+# All configuration lives in the system-wide sports-hub credentials file
+# (~/.config/sports-hub-credentials.ini, chmod 600), or SPORTS_HUB_CREDENTIALS if set:
+# DB / platform credentials, [runtime] db_con, [smtp] alerts. It is bind-mounted read-only
+# at /root/.config/sports-hub-credentials.ini, which is where sports-hub and __main__.py
+# both read it from (the container runs as root, so that is Path.home()).
 #
-# Resolved from the script's own location, not the caller's cwd, so cron needs no setup.
+# Resolved independently of the caller's cwd, so cron needs no setup.
 
 export PATH=/usr/local/bin:/usr/bin:/bin
 
@@ -15,7 +16,7 @@ export PATH=/usr/local/bin:/usr/bin:/bin
 IMAGE_NAME='nba_cockroach_db:latest'
 CONTAINER_NAME='update_tables'
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-CONFIG_FILE="$SCRIPT_DIR/credentials.ini"
+CONFIG_FILE="${SPORTS_HUB_CREDENTIALS:-$HOME/.config/sports-hub-credentials.ini}"
 
 if ! docker info >/dev/null 2>&1; then
     echo 'Docker daemon not responding. Ensure it is enabled to start on boot.'
@@ -24,7 +25,7 @@ fi
 
 if [ ! -f "$CONFIG_FILE" ]; then
     echo "Missing $CONFIG_FILE"
-    echo "Copy $SCRIPT_DIR/credentials.ini.example to it and fill it in."
+    echo "Create it (chmod 600) with the DB/platform, [runtime] and [smtp] sections."
     exit 1
 fi
 
@@ -37,7 +38,7 @@ fi
 # Container is kept after the run (no --rm) so `docker logs` works until the next run.
 docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1
 docker run --name "$CONTAINER_NAME" \
-    -v "$CONFIG_FILE:/app/credentials.ini:ro" \
+    -v "$CONFIG_FILE:/root/.config/sports-hub-credentials.ini:ro" \
     "$IMAGE_NAME" "$@"
 status=$?
 

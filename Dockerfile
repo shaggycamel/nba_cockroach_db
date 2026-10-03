@@ -40,10 +40,11 @@ COPY __main__.py .
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1
 
-# Runs as root on purpose: credentials.ini is bind-mounted read-only from a chmod 600
+# Runs as root on purpose: the credentials file is bind-mounted read-only from a chmod 600
 # host file, which a non-root uid in the container could not read.
 #
-# credentials.ini is NOT in the image: mount it at /app/credentials.ini
-# (sports-hub and __main__.py both read it from the working directory).
+# The credentials file is NOT in the image: mount it at
+# /root/.config/sports-hub-credentials.ini (sports-hub and __main__.py both resolve it
+# there, since Path.home() is /root for the root user).
 # Exec form so `docker run <image> tbl_a,tbl_b` reaches __main__.py as argv[1].
 ENTRYPOINT ["python", "__main__.py"]

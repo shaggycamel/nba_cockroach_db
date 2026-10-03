@@ -15,18 +15,16 @@ It runs as a Docker container, once per cron job, on a single always-on host (th
 
 ## Configuration
 
-Everything lives in one file, `credentials.ini` in the repo root — the same file sports-hub
-reads for its DB and platform credentials. Copy
-[credentials.ini.example](credentials.ini.example) and fill it in. Never commit it
-(`.gitignore` covers it).
+Everything lives in one system-wide file, `~/.config/sports-hub-credentials.ini` — the same
+file sports-hub reads for its DB and platform credentials. Set `SPORTS_HUB_CREDENTIALS` to
+point at a different path instead; both `__main__.py` and sports-hub honour it. Create the
+file `chmod 600` and never commit it (it lives outside the repo).
 
-`cron.sh` resolves it relative to its own location rather than the caller's working
-directory, so cron needs no `PATH`, `cd` or environment setup. A direct
-`python __main__.py` reads it from the current working directory, so run that from the
-repo root too.
+It holds the DB/platform sections sports-hub expects (`[cockroach]`/`[postgres]`,
+`[statyx]`, `[espn_api]`, `[yahoo_api]`) plus this repo's `[runtime]` and `[smtp]` sections.
 
-Note that `git clean -fdx` deletes ignored files and would therefore remove it. Plain
-`git clean -fd` is safe.
+A direct `python __main__.py` reads the same file, so no `cd` or working-directory setup is
+needed.
 
 | Section    | Key        | Env override    | Purpose                                     |
 | ---------- | ---------- | --------------- | ------------------------------------------- |
@@ -39,8 +37,8 @@ Environment variables win when set, so `os.environ['DB_CON'] = 'postgres'` still
 an interactive console. Without `[smtp] user` + `password` the failure email is skipped
 and the run simply exits 1.
 
-The repo's own `credentials.ini` should point at `[runtime] db_con = postgres` so a stray
-local run cannot write to cockroach.
+The local `~/.config` file should point at `[runtime] db_con = postgres` so a stray local
+run cannot write to cockroach.
 
 ## Deploying to the NUC
 
@@ -48,9 +46,10 @@ The image is built on the NUC itself — native amd64, no registry, and no crede
 leave the box.
 
 ```bash
-# 1. one-off: the config file, in the repo root
-cp credentials.ini.example credentials.ini && chmod 600 credentials.ini
-$EDITOR credentials.ini            # real creds, db_con = cockroach
+# 1. one-off: the system-wide config file
+mkdir -p ~/.config
+$EDITOR ~/.config/sports-hub-credentials.ini   # real creds, db_con = cockroach
+chmod 600 ~/.config/sports-hub-credentials.ini
 
 # 2. build (repeat after every git pull)
 cd ~/git/nba_cockroach_db && git pull
@@ -61,8 +60,8 @@ docker build -t nba_cockroach_db:latest .
 ./cron.sh nba_teams        # just one
 ```
 
-`cron.sh` bind-mounts `credentials.ini` read-only at `/app/credentials.ini`, so nothing
-secret is in the image. It keeps the container after the run (no `--rm`) so
+`cron.sh` bind-mounts the config read-only at `/root/.config/sports-hub-credentials.ini`,
+so nothing secret is in the image. It keeps the container after the run (no `--rm`) so
 `docker logs update_tables` works until the next run, and it propagates the exit status.
 
 Crontab — cron has no `PATH`, which is why `cron.sh` sets one:
@@ -72,9 +71,9 @@ Crontab — cron has no `PATH`, which is why `cron.sh` sets one:
 0 */6 * * * /home/oli/github/nba_cockroach_db/cron.sh nba_injuries >> /home/oli/github/nba_cockroach_db/cron.log 2>&1
 ```
 
-No environment setup needed — `cron.sh` finds `credentials.ini` in its own directory. The
-redirect captures the wrapper's output; the container's own logs are also available via
-`docker logs update_tables` until the next run.
+No environment setup needed — `cron.sh` reads `~/.config/sports-hub-credentials.ini` (or
+`SPORTS_HUB_CREDENTIALS`). The redirect captures the wrapper's output; the container's own
+logs are also available via `docker logs update_tables` until the next run.
 
 Run frequency is otherwise driven from the database: `util.update_schedule.pause`
 controls what a bare `./cron.sh` picks up.
@@ -90,7 +89,8 @@ controls what a bare `./cron.sh` picks up.
 - `uv` is pinned to the version that generated `uv.lock`, and `uv sync --locked` fails the
   build if the lock drifts from `pyproject.toml`. Bump the two together.
 - The container runs as root on purpose: a non-root uid could not read the `chmod 600`
-  host `credentials.ini` through the read-only bind mount.
+  host config through the read-only bind mount, and `/root/.config` is where sports-hub
+  resolves it by default.
 
 ## Development
 

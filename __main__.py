@@ -5,8 +5,9 @@ Usage:
     python __main__.py tbl_a,tbl_b          # only these table_names (alt-frequency runs)
     (interactive consoles: '-f <kernel file>' in argv is ignored)
 
-Configuration lives in credentials.ini, read from the working directory (the same file
-sports-hub reads for its DB and platform credentials):
+Configuration lives in the system-wide sports-hub credentials file (the same file
+sports-hub reads for its DB and platform credentials). It resolves, in order, from
+SPORTS_HUB_CREDENTIALS or ~/.config/sports-hub-credentials.ini:
 
     [runtime]
     db_con = cockroach
@@ -25,8 +26,8 @@ SMTP_USER, SMTP_PASSWORD, ALERT_TO.
 Whitespace around '=' is optional, but note that configparser does not treat '#' after a
 value as a comment -- it becomes part of the value. Keep comments on their own lines.
 
-See credentials.ini.example. In the container this file is bind-mounted at
-/app/credentials.ini; nothing secret is baked into the image.
+See the configured sports-hub credentials file. In the container it is bind-mounted at
+/root/.config/sports-hub-credentials.ini; nothing secret is baked into the image.
 """
 
 import configparser
@@ -39,6 +40,7 @@ from zoneinfo import ZoneInfo
 
 from polars import DataFrame
 from sports_hub import SportsHub
+from sports_hub.config import credentials_path
 
 try:  # escape hatch: a ./.env still works if you keep one. The image is never given one
     from dotenv import load_dotenv  # (.dockerignore excludes .env*), so this is a no-op there.
@@ -55,13 +57,13 @@ log = logging.getLogger('nba_cockroach_db')
 
 NZ = ZoneInfo('Pacific/Auckland')
 
-INI_PATH = os.path.join(os.getcwd(), 'credentials.ini')
+INI_PATH = credentials_path()
 _ini = configparser.ConfigParser()
 _ini.read(INI_PATH)  # a missing file is not an error: every lookup then falls through
 
 
 def setting(env_name, section, key, default=None):
-    """Read one setting: environment variable first, then credentials.ini.
+    """Read one setting: environment variable first, then the credentials file.
 
     Env wins so a cron --env-file or os.environ['DB_CON'] = 'postgres' in an
     interactive console can override whatever the ini says.
@@ -77,7 +79,7 @@ if not DB_CON:
         "environment. Either must name a section of that same file."
     )
 
-hub = SportsHub(db_con=DB_CON)
+hub = SportsHub(db_con=DB_CON, ini_path=INI_PATH)
 log.info('Writing to database: %s', DB_CON)
 
 
