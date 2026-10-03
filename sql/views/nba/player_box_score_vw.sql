@@ -1,7 +1,6 @@
-CREATE OR REPLACE VIEW nba.nba_player_box_score_vw AS
+create or replace view nba.player_box_score_vw as
 
-SELECT
-	lgs.season,
+ SELECT lgs.season,
     lgs.season_type,
     lgs.game_id,
     lgs.game_date,
@@ -76,29 +75,28 @@ SELECT
             ELSE 0
         END AS td3,
     pbs.plus_minus,
-	pbs.e_off_rating,
-	pbs.off_rating,
-	pbs.e_def_rating,
-	pbs.def_rating,
-	pbs.e_net_rating,
-	pbs.net_rating,
-	pbs.ast_pct,
-	pbs.ast_tov,
-	pbs.ast_ratio,
-	pbs.oreb_pct,
-	pbs.dreb_pct,
-	pbs.reb_pct,
-	pbs.tov_pct,
-	pbs.efg_pct,
-	pbs.ts_pct,
-	pbs.usg_pct,
-	pbs.e_usg_pct,
-	pbs.e_pace,
-	pbs.pace,
-	pbs.pace_per40,
-	pbs.poss,
-	pbs.pie
-        
+    pbs.e_off_rating,
+    pbs.off_rating,
+    pbs.e_def_rating,
+    pbs.def_rating,
+    pbs.e_net_rating,
+    pbs.net_rating,
+    pbs.ast_pct,
+    pbs.ast_tov,
+    pbs.ast_ratio,
+    pbs.oreb_pct,
+    pbs.dreb_pct,
+    pbs.reb_pct,
+    pbs.tov_pct,
+    pbs.efg_pct,
+    pbs.ts_pct,
+    pbs.usg_pct,
+    pbs.e_usg_pct,
+    pbs.e_pace,
+    pbs.pace,
+    pbs.pace_per40,
+    pbs.poss,
+    pbs.pie
    FROM nba.league_game_schedule lgs
      LEFT JOIN ( SELECT tr_inr.season,
             tr_inr.team_slug,
@@ -112,8 +110,6 @@ SELECT
                     key_dates.begin_date,
                     key_dates.end_date
                    FROM nba.key_dates) kd ON tr_inr.season = kd.season) tr ON lgs.season = tr.season AND lgs.team = tr.team_slug AND lgs.game_date >= tr.entry_date AND lgs.game_date < tr.exit_date
-     -- need game_date in join to stop duplication
-     LEFT JOIN nba.injuries inj ON lgs.game_id = inj.game_id AND lgs.game_date = inj.game_date AND tr.player_id = inj.nba_id
+     LEFT JOIN nba.injuries inj ON lgs.game_id = inj.game_id AND lgs.game_date = inj.game_date AND tr.player_id = inj.nba_id::double precision
      LEFT JOIN nba.player_box_score pbs ON lgs.game_id = pbs.game_id AND tr.player_id = pbs.player_id::double precision
-     LEFT JOIN util.conformed_player_id AS nm ON tr.player_id = nm.nba_id
-
+     LEFT JOIN util.player_id_map_vw nm ON tr.player_id = nm.nba_id::double precision

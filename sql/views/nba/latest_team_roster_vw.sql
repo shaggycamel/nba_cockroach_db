@@ -1,6 +1,6 @@
-CREATE OR REPLACE VIEW nba.nba_latest_team_roster_vw AS
+create or replace view nba.latest_team_roster_vw as
 
-WITH cte_latest_team_roster AS (
+ WITH cte_latest_team_roster AS (
          SELECT inner_q.season,
             inner_q.team_slug,
             inner_q.team_id,
@@ -24,7 +24,7 @@ WITH cte_latest_team_roster AS (
                     tr.exit_date,
                     row_number() OVER (PARTITION BY tr.season, tr.player_id ORDER BY tr.entry_date DESC) AS rn
                    FROM nba.team_roster tr
-                     LEFT JOIN util.conformed_player_id nm ON tr.player_id = nm.nba_id::double precision) inner_q
+                     LEFT JOIN util.player_id_map_vw nm ON tr.player_id = nm.nba_id::double precision) inner_q
           WHERE inner_q.rn = 1
         )
  SELECT cte_latest_team_roster.season,
@@ -39,4 +39,4 @@ WITH cte_latest_team_roster AS (
     id_match.yahoo_id,
     cte_latest_team_roster.how_acquired
    FROM cte_latest_team_roster
-     LEFT JOIN util.conformed_player_id id_match ON cte_latest_team_roster.player_id = id_match.nba_id::double precision;
+     LEFT JOIN util.player_id_map_vw id_match ON cte_latest_team_roster.player_id = id_match.nba_id::double precision

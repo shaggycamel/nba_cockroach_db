@@ -1,6 +1,6 @@
-create or replace view nba.nba_player_info_vw as
+create or replace view nba.player_info_vw as
 
-SELECT player_info.season,
+ SELECT player_info.season,
     player_info.player_id,
     player_info.first_name,
     player_info.last_name,
@@ -31,4 +31,4 @@ SELECT player_info.season,
     player_info.draft_round,
     player_info.draft_number,
     player_info.greatest_75_flag
-   FROM nba.player_info;
+   FROM nba.player_info

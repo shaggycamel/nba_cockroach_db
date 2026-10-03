@@ -57,3 +57,8 @@ hub.fty.get_free_agents()
 hub.fty.get_recent_activity()
 hub.fty.get_matchup_box_score()
 hub.fty.get_league_byes()
+
+# ============================ util ============================================
+# Check the backlog. If non-empty, resolve it with funciton.
+# SELECT platform, count(*) FROM util.unmatched_player_source_vw GROUP BY 1;
+# hub.utility.conform_player_ids(db, ctx.cur_season)
