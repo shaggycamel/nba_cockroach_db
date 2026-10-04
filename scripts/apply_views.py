@@ -1,22 +1,26 @@
 #!/usr/bin/env python3
-"""Apply every sql/views/<schema>/*.sql file to a Postgres database.
+"""Apply every sql/views/<schema>/*.sql file to a Postgres or Cockroach database.
 
 Nothing in this repo ever applied these files; this is that step. The database is the
 system of record for the views and sql/views is a hand-applied mirror, so this makes the
 mirror authoritative again.
 
-Each file is applied with CREATE OR REPLACE, in a transaction, retrying until no new
-failures appear so a view may safely reference another view whose file is applied later in
-the same run. Nothing is dropped by default: DROP ... CASCADE would silently take views
-that live in the database but have no file here (util.active_player_vw and
-util.unmatched_player_source_vw both hang off util.player_directory_vw). When a view's
-column list has genuinely changed, CREATE OR REPLACE cannot express it -- use --force-drop,
-which drops that one view without CASCADE so a real dependency fails loudly instead of
-being destroyed.
+Each file is applied with CREATE OR REPLACE, retrying until no new failures appear so a view
+may safely reference another view whose file is applied later in the same run. Nothing is
+dropped by default: DROP ... CASCADE would silently take views that live in the database but
+have no file here (util.active_player_vw and util.unmatched_player_source_vw both hang off
+util.player_directory_vw). When a view's column list has genuinely changed, CREATE OR
+REPLACE cannot express it -- use --force-drop, which drops that one view without CASCADE so a
+real dependency fails loudly instead of being destroyed.
 
     PGCONN=postgresql://... python scripts/apply_views.py --dry-run
     PGCONN=postgresql://... python scripts/apply_views.py
     PGCONN=postgresql://... python scripts/apply_views.py --schema fty
+
+Cockroach rejects DDL inside an explicit transaction, so statements are not wrapped in one
+when the target reports itself as CockroachDB (detected, or forced with
+--no-single-transaction). Cockroach also has no implicit grants for a read-only role, so
+--grant re-applies SELECT to that role across every view it just created.
 
 The closing count check compares live view counts against the file count per schema, so a
 view that exists in the database without a file is visible rather than assumed harmless.
@@ -49,20 +53,25 @@ def view_name(sql: str) -> str:
     return match.group(1)
 
 
-def psql(dsn: str, sql: str) -> tuple[bool, str]:
-    proc = subprocess.run(
-        ['psql', dsn, '--single-transaction', '-v', 'ON_ERROR_STOP=1', '-c', sql],
-        capture_output=True,
-        text=True,
-    )
+def psql(dsn: str, sql: str, single_tx: bool = True) -> tuple[bool, str]:
+    args = ['psql', dsn, '-v', 'ON_ERROR_STOP=1']
+    if single_tx:
+        args.append('--single-transaction')
+    proc = subprocess.run([*args, '-c', sql], capture_output=True, text=True)
     return proc.returncode == 0, (proc.stderr or proc.stdout).strip()
 
 
-def live_counts(dsn: str, schemas: list[str]) -> Counter[str]:
+def is_cockroach(dsn: str) -> bool:
+    ok, out = psql(dsn, 'SELECT version();', single_tx=False)
+    return ok and 'cockroach' in out.lower()
+
+
+def live_counts(dsn: str, schemas: list[str], single_tx: bool = True) -> Counter[str]:
     quoted = ','.join(f"'{s}'" for s in schemas)
     ok, out = psql(
         dsn,
         f'SELECT schemaname, count(*) FROM pg_views WHERE schemaname IN ({quoted}) GROUP BY 1',
+        single_tx,
     )
     counts: Counter[str] = Counter()
     if not ok:
@@ -83,6 +92,17 @@ def main() -> int:
         action='store_true',
         help='drop each view (no CASCADE) before creating it; needed only when a column '
         'list changed, and it fails loudly rather than taking dependent views with it',
+    )
+    parser.add_argument(
+        '--no-single-transaction',
+        action='store_true',
+        help='do not wrap statements in a transaction; implied automatically when the '
+        'target reports itself as CockroachDB, which rejects DDL inside one',
+    )
+    parser.add_argument(
+        '--grant',
+        default=None,
+        help='after applying, GRANT SELECT on every applied view to this role',
     )
     parser.add_argument('--dry-run', action='store_true')
     args = parser.parse_args()
@@ -110,6 +130,11 @@ def main() -> int:
             print(f'  {name:40s} {path.relative_to(VIEWS_DIR.parent.parent)}')
         return 0
 
+    single_tx = not args.no_single_transaction
+    if single_tx and is_cockroach(args.dsn):
+        print('cockroach detected: statements will not be wrapped in a transaction')
+        single_tx = False
+
     expected = Counter(name.split('.')[0] for _, name, _ in jobs)
     pending: list[tuple[Path, str, str]] = list(jobs)
     last_errors: dict[Path, str] = {}
@@ -119,7 +144,7 @@ def main() -> int:
         last_errors = {}
         for path, name, sql in pending:
             prefix = f'DROP VIEW IF EXISTS {name};\n' if args.force_drop else ''
-            ok, out = psql(args.dsn, f'{prefix}{sql}\n')
+            ok, out = psql(args.dsn, f'{prefix}{sql}\n', single_tx)
             if not ok:
                 failed.append((path, name, sql))
                 last_errors[path] = out
@@ -136,7 +161,7 @@ def main() -> int:
             print(f'FAILED {path}: {last_errors.get(path, "")}', file=sys.stderr)
         return 1
 
-    counts = live_counts(args.dsn, sorted(expected))
+    counts = live_counts(args.dsn, sorted(expected), single_tx)
     bad = False
     for schema in sorted(expected):
         got, want = counts.get(schema, 0), expected[schema]
@@ -147,6 +172,18 @@ def main() -> int:
         else:
             note = 'ok'
         print(f'{schema}: {got} views live, {want} files [{note}]')
+
+    if args.grant:
+        granted = 0
+        for _, name, _ in jobs:
+            ok, out = psql(args.dsn, f'GRANT SELECT ON {name} TO {args.grant};', single_tx)
+            if ok:
+                granted += 1
+            else:
+                bad = True
+                print(f'GRANT FAILED {name}: {out}', file=sys.stderr)
+        print(f'granted SELECT on {granted}/{len(jobs)} views to {args.grant}')
+
     return 1 if bad else 0
 
 
