@@ -1,6 +1,6 @@
-create or replace view fty_dev.league_schedule_vw as
+create or replace view fty.league_schedule_vw as
 
--- league_matchup.opponent_id is double precision in fty_dev; cast to bigint so consumers
+-- league_matchup.opponent_id is double precision in fty; cast to bigint so consumers
 -- join cleanly against competitor_id (fty's view cast the other direction instead).
 --
 -- A bye has two representations in the source data, and is_bye normalises both:
@@ -18,8 +18,8 @@ select
     mup.competitor_id,
     mup.opponent_id::bigint as opponent_id,
     mup.competitor_id is not null and mup.opponent_id is null as is_bye
-from fty_dev.league_matchup_dates mup_dates
-    left join fty_dev.league_matchup mup
+from fty.league_matchup_dates mup_dates
+    left join fty.league_matchup mup
         on mup_dates.season = mup.season
        and mup_dates.platform = mup.platform
        and mup_dates.league_id = mup.league_id
@@ -37,8 +37,8 @@ select
     bye.competitor_id,
     null::bigint as opponent_id,
     true as is_bye
-from fty_dev.league_byes bye
-    join fty_dev.league_matchup_dates mup_dates
+from fty.league_byes bye
+    join fty.league_matchup_dates mup_dates
         on mup_dates.season = bye.season::text
        and mup_dates.platform = bye.platform::text
        and mup_dates.league_id = bye.league_id

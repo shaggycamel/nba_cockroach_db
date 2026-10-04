@@ -1,4 +1,4 @@
-create or replace view fty_dev.base_vw as
+create or replace view fty.base_vw as
 
 select
     lc.season,
@@ -8,8 +8,8 @@ select
     lc.competitor_abbrev,
     lc.competitor_name,
     lg.league_name
-from fty_dev.league_competitor lc
-    left join fty_dev.league lg
+from fty.league_competitor lc
+    left join fty.league lg
         on lc.league_id = lg.league_id
        and lc.season = lg.season
        and lc.platform = lg.platform

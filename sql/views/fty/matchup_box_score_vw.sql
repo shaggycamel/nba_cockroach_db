@@ -1,4 +1,4 @@
-create or replace view fty_dev.matchup_box_score_vw as
+create or replace view fty.matchup_box_score_vw as
 
 -- Pivots the long matchup_box_score back to one column per stat.
 -- fgm/fga/ftm/fta are emitted whether or not the league scores them: calc_z_pcts() in
@@ -36,8 +36,8 @@ select
     max(bs.value) filter (where bs.category = 'td3')   as td3,
     lc.competitor_abbrev,
     lc.competitor_name
-from fty_dev.matchup_box_score bs
-    left join fty_dev.league_competitor lc
+from fty.matchup_box_score bs
+    left join fty.league_competitor lc
         on bs.season = lc.season
        and bs.platform = lc.platform
        and bs.league_id = lc.league_id

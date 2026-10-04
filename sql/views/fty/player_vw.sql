@@ -1,10 +1,10 @@
-create or replace view fty_dev.player_vw as
+create or replace view fty.player_vw as
 
 -- Resolves a fantasy platform's player id to the canonical nba player id and name.
 -- Replaces util.conformed_player_id_RETIRED.
 --
 -- platform is emitted lower case, as util.player_source_id stores it. Consumers in
--- fty_dev join with lower(x.platform), matching util.player_directory_vw's convention.
+-- fty join with lower(x.platform), matching util.player_directory_vw's convention.
 --
 -- 37 player_keys carry two nba source ids (name collisions and truncated/legacy ids),
 -- which would otherwise fan a single roster row out into two. DISTINCT ON keeps the id

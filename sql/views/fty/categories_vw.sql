@@ -1,4 +1,4 @@
-create or replace view fty_dev.categories_vw as
+create or replace view fty.categories_vw as
 
 -- One row per league per category, tagged with the role that category plays.
 --
@@ -26,17 +26,17 @@ select
     'scored'                        as category_role,
     lg.scoring_type,
     sf.scoring_format
-from fty_dev.league_categories lc
-    join fty_dev.platform_category pc
+from fty.league_categories lc
+    join fty.platform_category pc
         on pc.platform = lc.platform
        and pc.platform_category = lc.category
-    join fty_dev.category_label cl
+    join fty.category_label cl
         on cl.nba_category = pc.nba_category
-    left join fty_dev.league lg
+    left join fty.league lg
         on lg.season = lc.season
        and lg.platform = lc.platform
        and lg.league_id = lc.league_id
-    left join fty_dev.scoring_format sf
+    left join fty.scoring_format sf
         on sf.platform = lg.platform
        and sf.scoring_type = lg.scoring_type::text
 
@@ -59,16 +59,16 @@ select
     'component'                     as category_role,
     lg.scoring_type,
     sf.scoring_format
-from fty_dev.league lg
-    cross join fty_dev.category_label cl
-    left join fty_dev.scoring_format sf
+from fty.league lg
+    cross join fty.category_label cl
+    left join fty.scoring_format sf
         on sf.platform = lg.platform
        and sf.scoring_type = lg.scoring_type::text
 where cl.nba_category in ('fgm', 'fga', 'ftm', 'fta')
   and not exists (
         select 1
-        from fty_dev.league_categories lc
-            join fty_dev.platform_category pc
+        from fty.league_categories lc
+            join fty.platform_category pc
                 on pc.platform = lc.platform
                and pc.platform_category = lc.category
         where lc.season = lg.season
@@ -96,9 +96,9 @@ select
     'derived'                       as category_role,
     lg.scoring_type,
     sf.scoring_format
-from fty_dev.league lg
-    cross join fty_dev.category_label cl
-    left join fty_dev.scoring_format sf
+from fty.league lg
+    cross join fty.category_label cl
+    left join fty.scoring_format sf
         on sf.platform = lg.platform
        and sf.scoring_type = lg.scoring_type::text
 where cl.nba_category in ('all_cat', 'fg_z', 'ft_z')

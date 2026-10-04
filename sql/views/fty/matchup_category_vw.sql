@@ -1,4 +1,4 @@
-create or replace view fty_dev.matchup_category_vw as
+create or replace view fty.matchup_category_vw as
 
 -- Long form matchup results, one row per competitor per category.
 -- Reads the scored categories from categories_vw. A ratio category (fg_pct) is built
@@ -25,20 +25,20 @@ select
         when c.points is not null then bs.value * c.points
         else null::double precision
     end as fantasy_points
-from fty_dev.categories_vw c
-    join fty_dev.matchup_box_score bs
+from fty.categories_vw c
+    join fty.matchup_box_score bs
         on bs.season = c.season
        and bs.platform = c.platform
        and bs.league_id = c.league_id
        and bs.category = coalesce(c.numerator, c.nba_category)
-    left join fty_dev.matchup_box_score num
+    left join fty.matchup_box_score num
         on num.season = c.season
        and num.platform = c.platform
        and num.league_id = c.league_id
        and num.matchup = bs.matchup
        and num.competitor_id = bs.competitor_id
        and num.category = c.numerator
-    left join fty_dev.matchup_box_score den
+    left join fty.matchup_box_score den
         on den.season = c.season
        and den.platform = c.platform
        and den.league_id = c.league_id

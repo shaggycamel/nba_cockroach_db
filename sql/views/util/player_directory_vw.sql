@@ -3,8 +3,8 @@ create or replace view util.player_directory_vw as
 -- Every (season, platform, source_id) a player is known by, across nba, statyx and the
 -- fantasy platforms. Feeds util.active_player_vw and util.unmatched_player_source_vw.
 --
--- The fantasy legs read fty_dev, not fty. ESPN coverage is identical between the two
--- schemas across 2023-24/2024-25/2025-26; fty_dev holds no Yahoo league, so the 2024-25
+-- The fantasy legs read fty (formerly fty_dev). ESPN coverage is identical between the two
+-- schemas across 2023-24/2024-25/2025-26; the Yahoo league is retired, so the 2024-25
 -- Yahoo league (121793) no longer appears here. Its id mappings remain in
 -- util.player_source_id.
 
@@ -47,7 +47,7 @@ select
     lower(fa.platform) as platform,
     fa.player_id as source_id,
     fa.player_name as source_name
-from fty_dev.free_agents fa
+from fty.free_agents fa
 where fa.player_id is not null
 
 union
@@ -57,5 +57,5 @@ select
     lower(cr.platform) as platform,
     cr.player_fantasy_id as source_id,
     cr.player_name as source_name
-from fty_dev.competitor_roster cr
+from fty.competitor_roster cr
 where cr.player_fantasy_id is not null
