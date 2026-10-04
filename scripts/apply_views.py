@@ -3,16 +3,23 @@
 
 Nothing in this repo ever applied these files; this is that step. The database is the
 system of record for the views and sql/views is a hand-applied mirror, so this makes the
-mirror authoritative again: each view is DROPped (CASCADE) and recreated from its file in
-one transaction, retrying until no new failures appear, so a view may safely reference
-another view whose file is applied later in the same run.
+mirror authoritative again.
+
+Each file is applied with CREATE OR REPLACE, in a transaction, retrying until no new
+failures appear so a view may safely reference another view whose file is applied later in
+the same run. Nothing is dropped by default: DROP ... CASCADE would silently take views
+that live in the database but have no file here (util.active_player_vw and
+util.unmatched_player_source_vw both hang off util.player_directory_vw). When a view's
+column list has genuinely changed, CREATE OR REPLACE cannot express it -- use --force-drop,
+which drops that one view without CASCADE so a real dependency fails loudly instead of
+being destroyed.
 
     PGCONN=postgresql://... python scripts/apply_views.py --dry-run
     PGCONN=postgresql://... python scripts/apply_views.py
     PGCONN=postgresql://... python scripts/apply_views.py --schema fty
 
-Because it drops with CASCADE, a view that exists in the database but has no file here is
-dropped and not recreated. The closing count check makes that visible instead of silent.
+The closing count check compares live view counts against the file count per schema, so a
+view that exists in the database without a file is visible rather than assumed harmless.
 """
 
 from __future__ import annotations
@@ -71,6 +78,12 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--dsn', default=os.environ.get('PGCONN'))
     parser.add_argument('--schema', default=None, help='only this sql/views/<schema>/ folder')
+    parser.add_argument(
+        '--force-drop',
+        action='store_true',
+        help='drop each view (no CASCADE) before creating it; needed only when a column '
+        'list changed, and it fails loudly rather than taking dependent views with it',
+    )
     parser.add_argument('--dry-run', action='store_true')
     args = parser.parse_args()
 
@@ -105,7 +118,8 @@ def main() -> int:
         failed: list[tuple[Path, str, str]] = []
         last_errors = {}
         for path, name, sql in pending:
-            ok, out = psql(args.dsn, f'DROP VIEW IF EXISTS {name} CASCADE;\n{sql}\n')
+            prefix = f'DROP VIEW IF EXISTS {name};\n' if args.force_drop else ''
+            ok, out = psql(args.dsn, f'{prefix}{sql}\n')
             if not ok:
                 failed.append((path, name, sql))
                 last_errors[path] = out
@@ -126,8 +140,13 @@ def main() -> int:
     bad = False
     for schema in sorted(expected):
         got, want = counts.get(schema, 0), expected[schema]
-        print(f'{schema}: {got} views live, {want} files [{"ok" if got == want else "MISMATCH"}]')
-        bad = bad or got != want
+        if got < want:
+            note, bad = 'MISMATCH', True  # a file did not apply
+        elif got > want:
+            note = f'EXTRA {got - want} in the db with no file here'
+        else:
+            note = 'ok'
+        print(f'{schema}: {got} views live, {want} files [{note}]')
     return 1 if bad else 0
 
 
