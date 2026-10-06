@@ -211,6 +211,25 @@ def main():
     for row in schedule.iter_rows(named=True):
         run(row['table_name'], lambda f=row['associated_function']: resolve(f)())
 
+    # Player identity is cross-domain reference data, not a table in
+    # util.update_schedule, so like connect_leagues it gets no update_log row of
+    # its own; a failure still counts towards the alert, exit code and end row.
+    # It is a cheap no-op most days: the model is only called when new source ids
+    # are unresolved. Guarded on the method existing so an image built against a
+    # sports-hub that predates it logs a warning instead of failing every run.
+    sync_identity = getattr(hub.util, 'sync_player_identity', None)
+    if sync_identity is None:
+        log.warning(
+            'sports_hub has no sync_player_identity (pinned sports-hub predates it); '
+            'skipping player identity sync'
+        )
+    else:
+        try:
+            log.info('player identity: %s', sync_identity())
+        except Exception as e:
+            log.exception('player identity sync failed')
+            failures.append(('util.sync_player_identity', f'{type(e).__name__}: {e}'))
+
     log_event('process end', len(failures) == 0)
 
     if log_write_errors:
