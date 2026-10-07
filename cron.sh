@@ -1,6 +1,7 @@
 #!/bin/bash
-# Usage: ./cron.sh                 -> all unpaused tables in util.update_schedule
-#        ./cron.sh tbl_a,tbl_b     -> only those table_names
+# Usage: ./cron.sh                      -> all unpaused tables in util.update_schedule
+#        ./cron.sh daily,intraday             -> only rows whose cadence is one of these
+#        ./cron.sh daily intraday             -> same; space- or comma-separated
 #
 # All configuration lives in the system-wide sports-hub credentials file
 # (~/.config/sports-hub-credentials.ini, chmod 600), or SPORTS_HUB_CREDENTIALS if set:

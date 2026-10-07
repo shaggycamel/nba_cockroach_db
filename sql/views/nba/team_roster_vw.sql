@@ -13,11 +13,12 @@ SELECT tr.season,
     nm.conformed_name AS player_name,
     tr."position",
     tr.how_acquired,
-    tr.salary,
+    COALESCE(ct.base_salary, tr.salary) AS salary,
     COALESCE(tr.entry_date, kd.begin_date) AS entry_date,
     COALESCE(tr.exit_date, kd.end_date) AS exit_date
    FROM nba.team_roster tr
      LEFT JOIN util.player_id_map_vw nm ON tr.player_id = nm.nba_id::double precision
+     LEFT JOIN statyx.contracts ct ON ct.player_id = nm.statyx_id::bigint AND ct.season = tr.season
      LEFT JOIN ( SELECT key_dates.season,
             key_dates.season_type,
             key_dates.begin_date,

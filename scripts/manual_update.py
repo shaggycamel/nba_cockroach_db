@@ -34,14 +34,12 @@ hub.statyx.get_usage_shock()
 hub.statyx.get_defense_vs_position()
 hub.statyx.get_play_type_defense()
 hub.statyx.get_shot_zone_defense()
-
-# Statyx returns 500 on these six; re-enable once they fix it
-# hub.statyx.get_assist_profile()
-# hub.statyx.get_drives()
-# hub.statyx.get_matchup_history()
-# hub.statyx.get_scoring_breakdown()
-# hub.statyx.get_shooting_splits()
-# hub.statyx.get_team_assist_defense()
+hub.statyx.get_assist_profile()
+hub.statyx.get_drives()
+hub.statyx.get_matchup_history()
+hub.statyx.get_scoring_breakdown()
+hub.statyx.get_shooting_splits()
+hub.statyx.get_team_assist_defense()
 
 
 # ============================ fty ============================================

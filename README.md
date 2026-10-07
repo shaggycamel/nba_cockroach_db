@@ -8,8 +8,13 @@ table to `util.update_log`, emails any failures, and exits non-zero if anything 
 
 ```
 python __main__.py                 # every table where pause IS FALSE
-python __main__.py tbl_a,tbl_b     # only these table_names (alternate-frequency runs)
+python __main__.py daily,6h        # only rows whose cadence is one of these
+python __main__.py daily 6h        # same; space- or comma-separated
 ```
+
+Each row's `cadence` names the run it belongs to: `./cron.sh daily` picks up every
+unpaused row with `cadence = 'daily'`, and a bare `./cron.sh` ignores cadence entirely.
+Rows run once each, in a single `ORDER BY table_name DESC`, with no per-cadence grouping.
 
 It runs as a Docker container, once per cron job, on a single always-on host (the NUC).
 
@@ -57,7 +62,7 @@ docker build -t nba_cockroach_db:latest .
 
 # 3. run
 ./cron.sh                  # all unpaused tables
-./cron.sh nba_teams        # just one
+./cron.sh daily,6h         # only those cadences
 ```
 
 `cron.sh` bind-mounts the config read-only at `/root/.config/sports-hub-credentials.ini`,
@@ -67,16 +72,18 @@ so nothing secret is in the image. It keeps the container after the run (no `--r
 Crontab — cron has no `PATH`, which is why `cron.sh` sets one:
 
 ```cron
-0  3 * * *  /home/oli/github/nba_cockroach_db/cron.sh >> /home/oli/github/nba_cockroach_db/cron.log 2>&1
-0 */6 * * * /home/oli/github/nba_cockroach_db/cron.sh nba_injuries >> /home/oli/github/nba_cockroach_db/cron.log 2>&1
+0  3 * * *  /home/oli/github/nba_cockroach_db/cron.sh daily >> /home/oli/github/nba_cockroach_db/cron.log 2>&1
+0 */6 * * * /home/oli/github/nba_cockroach_db/cron.sh 6h >> /home/oli/github/nba_cockroach_db/cron.log 2>&1
 ```
 
 No environment setup needed — `cron.sh` reads `~/.config/sports-hub-credentials.ini` (or
 `SPORTS_HUB_CREDENTIALS`). The redirect captures the wrapper's output; the container's own
 logs are also available via `docker logs update_tables` until the next run.
 
-Run frequency is otherwise driven from the database: `util.update_schedule.pause`
-controls what a bare `./cron.sh` picks up.
+Run frequency is otherwise driven from the database: `util.update_schedule.cadence`
+selects which run picks up a row, and `util.update_schedule.pause` excludes it from
+every run (including a bare `./cron.sh`). The `cadence` column is mirrored in
+`sql/tables/util.update_schedule.sql`.
 
 ## Notes on the image
 
@@ -100,5 +107,5 @@ uvx ruff check __main__.py
 ```
 
 `scripts/manual_update.py` is a REPL scratchpad for running individual `hub.*` calls by
-hand — not part of the scheduled run, and not in the image. `sql/` holds view and function
-DDL for reference.
+hand — not part of the scheduled run, and not in the image. `sql/` holds view, function and
+table DDL for reference (hand-applied; the database is the system of record).

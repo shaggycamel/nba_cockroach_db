@@ -2,7 +2,8 @@
 
 Usage:
     python __main__.py                      # every table where pause IS FALSE
-    python __main__.py tbl_a,tbl_b          # only these table_names (alt-frequency runs)
+    python __main__.py daily,6h             # only these cadences (alt-frequency runs)
+    python __main__.py daily 6h             # same; space- or comma-separated
     (interactive consoles: '-f <kernel file>' in argv is ignored)
 
 Configuration lives in the system-wide sports-hub credentials file (the same file
@@ -154,9 +155,11 @@ def send_alert(failures):
 def main():
     log_event('process start', True)
 
-    # Optional table_name overrides; '-f' is ignored (legacy interactive flag)
+    # Optional cadence filters; '-f' is ignored (legacy interactive flag)
     # ipykernel (Positron/Jupyter consoles) passes '-f <connection file>' in argv;
-    # drop the flag AND its value so the kernel file isn't read as a table name.
+    # drop the flag AND its value so the kernel file isn't read as a cadence.
+    # Cadences come space- or comma-separated ('daily,6h' == 'daily 6h'); a bare run
+    # means every unpaused row.
     args, skip = [], False
     for a in sys.argv[1:]:
         if skip:
@@ -165,24 +168,31 @@ def main():
             skip = True
         else:
             args.append(a)
+    cadences = list(dict.fromkeys(c.strip() for a in args for c in a.split(',') if c.strip()))
+
     try:
-        if args:
-            names = [n.strip().replace("'", "''") for n in ','.join(args).split(',') if n.strip()]
-            quoted = ','.join(f"'{n}'" for n in names)
-            schedule = hub.db.read(
-                f'SELECT table_name, associated_function FROM util.update_schedule WHERE table_name IN ({quoted})'
-            )
+        if cadences:
+            # Only the placeholder count is interpolated; the values stay bound.
+            placeholders = ', '.join(f':c{i}' for i in range(len(cadences)))
+            execute_options = {'parameters': {f'c{i}': c for i, c in enumerate(cadences)}}
+            where = f'WHERE cadence IN ({placeholders}) AND pause IS FALSE'
         else:
-            schedule = hub.db.read(
-                'SELECT table_name, associated_function FROM util.update_schedule '
-                'WHERE pause IS FALSE ORDER BY table_name DESC'
-            )
+            execute_options, where = None, 'WHERE pause IS FALSE'
+        schedule = hub.db.read(
+            'SELECT table_name, associated_function FROM util.update_schedule '
+            f'{where} ORDER BY table_name DESC',
+            execute_options=execute_options,
+        )
     except Exception as e:
         error = f'{type(e).__name__}: {e}'
         log.exception('could not read util.update_schedule')
         log_event('process end', False, error)
         send_alert([('util.update_schedule', error)])
         sys.exit(1)
+
+    log.info('cadences: %s', ', '.join(cadences) if cadences else 'all')
+    if schedule.is_empty():
+        log.warning('no tables to update for %s', ', '.join(cadences) if cadences else 'all')
 
     failures = []
 
@@ -210,25 +220,6 @@ def main():
 
     for row in schedule.iter_rows(named=True):
         run(row['table_name'], lambda f=row['associated_function']: resolve(f)())
-
-    # Player identity is cross-domain reference data, not a table in
-    # util.update_schedule, so like connect_leagues it gets no update_log row of
-    # its own; a failure still counts towards the alert, exit code and end row.
-    # It is a cheap no-op most days: the model is only called when new source ids
-    # are unresolved. Guarded on the method existing so an image built against a
-    # sports-hub that predates it logs a warning instead of failing every run.
-    sync_identity = getattr(hub.util, 'sync_player_identity', None)
-    if sync_identity is None:
-        log.warning(
-            'sports_hub has no sync_player_identity (pinned sports-hub predates it); '
-            'skipping player identity sync'
-        )
-    else:
-        try:
-            log.info('player identity: %s', sync_identity())
-        except Exception as e:
-            log.exception('player identity sync failed')
-            failures.append(('util.sync_player_identity', f'{type(e).__name__}: {e}'))
 
     log_event('process end', len(failures) == 0)
 
