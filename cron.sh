@@ -19,6 +19,16 @@ CONTAINER_NAME='update_tables'
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 CONFIG_FILE="${SPORTS_HUB_CREDENTIALS:-$HOME/.config/sports-hub-credentials.ini}"
 
+# Serialise runs. Cron ticks can overlap when a run is slow, and the `docker rm -f`
+# below would then kill the in-flight container mid-write. Wait up to an hour for the
+# lock (so a normal overrun simply queues), then give up rather than pile up more.
+LOCK_FILE="${LOCK_FILE:-${TMPDIR:-/tmp}/nba_cockroach_db.lock}"
+exec 9>"$LOCK_FILE"
+if ! flock -w 3600 9; then
+    echo 'Another run is still in progress after 1h; skipping this tick.'
+    exit 1
+fi
+
 if ! docker info >/dev/null 2>&1; then
     echo 'Docker daemon not responding. Ensure it is enabled to start on boot.'
     exit 1
