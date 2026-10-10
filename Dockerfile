@@ -22,7 +22,7 @@ RUN uv sync --no-dev --no-install-project --locked --compile-bytecode
 # ---- runtime stage
 FROM python:3.12-slim
 
-LABEL org.opencontainers.image.source="https://github.com/shaggycamel/nba_cockroach_db"
+LABEL org.opencontainers.image.source="https://github.com/shaggycamel/scs.nba.database"
 LABEL org.opencontainers.image.description="Scheduled NBA/fantasy table updates from util.update_schedule"
 
 # libpq5: psycopg2 runtime (scs-hub pins psycopg2, which has no Linux wheels).
