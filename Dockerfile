@@ -1,5 +1,5 @@
 # ---- build stage: compilers + git are only needed to install deps
-# (psycopg2 builds from source; sports-hub is installed from GitHub)
+# (psycopg2 builds from source; scs-hub is installed from GitHub)
 FROM python:3.12-slim AS build
 
 # Pinned to the uv that generated uv.lock, so the image can't be tripped up by a
@@ -25,10 +25,10 @@ FROM python:3.12-slim
 LABEL org.opencontainers.image.source="https://github.com/shaggycamel/nba_cockroach_db"
 LABEL org.opencontainers.image.description="Scheduled NBA/fantasy table updates from util.update_schedule"
 
-# libpq5: psycopg2 runtime (sports-hub pins psycopg2, which has no Linux wheels).
+# libpq5: psycopg2 runtime (scs-hub pins psycopg2, which has no Linux wheels).
 # tzdata: ZoneInfo('Pacific/Auckland').
 # default-jre-headless: nbainjuries starts a JVM via jpype at import time, and
-#   sports_hub.nba imports it at module top, so Java is needed on every run.
+#   scs_hub.nba imports it at module top, so Java is needed on every run.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends libpq5 tzdata default-jre-headless \
  && rm -rf /var/lib/apt/lists/*
@@ -44,7 +44,7 @@ ENV PATH="/app/.venv/bin:$PATH" \
 # host file, which a non-root uid in the container could not read.
 #
 # The credentials file is NOT in the image: mount it at
-# /root/.config/sports-hub-credentials.ini (sports-hub and __main__.py both resolve it
+# /root/.config/scs_hub_credentials.ini (scs-hub and __main__.py both resolve it
 # there, since Path.home() is /root for the root user).
 # Exec form so `docker run <image> daily,6h` reaches __main__.py as argv[1].
 ENTRYPOINT ["python", "__main__.py"]

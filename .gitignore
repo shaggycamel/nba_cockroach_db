@@ -1,6 +1,6 @@
 # secrets / local config
 credentials.ini
-sports-hub-credentials.ini
+scs_hub_credentials.ini
 database.ini
 .env
 .env.*

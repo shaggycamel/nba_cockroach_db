@@ -3,10 +3,10 @@
 #        ./cron.sh daily,intraday             -> only rows whose cadence is one of these
 #        ./cron.sh daily intraday             -> same; space- or comma-separated
 #
-# All configuration lives in the system-wide sports-hub credentials file
-# (~/.config/sports-hub-credentials.ini, chmod 600), or SPORTS_HUB_CREDENTIALS if set:
+# All configuration lives in the system-wide scs-hub credentials file
+# (~/.config/scs_hub_credentials.ini, chmod 600), or SCS_HUB_CREDENTIALS if set:
 # DB / platform credentials, [runtime] db_con, [smtp] alerts. It is bind-mounted read-only
-# at /root/.config/sports-hub-credentials.ini, which is where sports-hub and __main__.py
+# at /root/.config/scs_hub_credentials.ini, which is where scs-hub and __main__.py
 # both read it from (the container runs as root, so that is Path.home()).
 #
 # Resolved independently of the caller's cwd, so cron needs no setup.
@@ -17,7 +17,7 @@ export PATH=/usr/local/bin:/usr/bin:/bin
 IMAGE_NAME='nba_cockroach_db:latest'
 CONTAINER_NAME='update_tables'
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-CONFIG_FILE="${SPORTS_HUB_CREDENTIALS:-$HOME/.config/sports-hub-credentials.ini}"
+CONFIG_FILE="${SCS_HUB_CREDENTIALS:-$HOME/.config/scs_hub_credentials.ini}"
 
 # Serialise runs. Cron ticks can overlap when a run is slow, and the `docker rm -f`
 # below would then kill the in-flight container mid-write. Wait up to an hour for the
@@ -49,7 +49,7 @@ fi
 # Container is kept after the run (no --rm) so `docker logs` works until the next run.
 docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1
 docker run --name "$CONTAINER_NAME" \
-    -v "$CONFIG_FILE:/root/.config/sports-hub-credentials.ini:ro" \
+    -v "$CONFIG_FILE:/root/.config/scs_hub_credentials.ini:ro" \
     "$IMAGE_NAME" "$@"
 status=$?
 

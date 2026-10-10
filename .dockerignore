@@ -9,7 +9,7 @@ __pycache__
 # secrets: the credentials file is bind-mounted at runtime, never baked in
 credentials.ini
 credentials.ini.example
-sports-hub-credentials.ini
+scs_hub_credentials.ini
 database.ini
 *.env
 .env*

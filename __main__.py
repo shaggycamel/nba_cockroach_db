@@ -6,9 +6,9 @@ Usage:
     python __main__.py daily 6h             # same; space- or comma-separated
     (interactive consoles: '-f <kernel file>' in argv is ignored)
 
-Configuration lives in the system-wide sports-hub credentials file (the same file
-sports-hub reads for its DB and platform credentials). It resolves, in order, from
-SPORTS_HUB_CREDENTIALS or ~/.config/sports-hub-credentials.ini:
+Configuration lives in the system-wide scs-hub credentials file (the same file
+scs-hub reads for its DB and platform credentials). It resolves, in order, from
+SCS_HUB_CREDENTIALS or ~/.config/scs_hub_credentials.ini:
 
     [runtime]
     db_con = cockroach
@@ -27,8 +27,8 @@ SMTP_USER, SMTP_PASSWORD, ALERT_TO.
 Whitespace around '=' is optional, but note that configparser does not treat '#' after a
 value as a comment -- it becomes part of the value. Keep comments on their own lines.
 
-See the configured sports-hub credentials file. In the container it is bind-mounted at
-/root/.config/sports-hub-credentials.ini; nothing secret is baked into the image.
+See the configured scs-hub credentials file. In the container it is bind-mounted at
+/root/.config/scs_hub_credentials.ini; nothing secret is baked into the image.
 """
 
 import configparser
@@ -40,8 +40,8 @@ from smtplib import SMTP
 from zoneinfo import ZoneInfo
 
 from polars import DataFrame
-from sports_hub import SportsHub
-from sports_hub.config import credentials_path
+from scs_hub import SportsHub
+from scs_hub.config import credentials_path
 
 try:  # escape hatch: a ./.env still works if you keep one. The image is never given one
     from dotenv import load_dotenv  # (.dockerignore excludes .env*), so this is a no-op there.

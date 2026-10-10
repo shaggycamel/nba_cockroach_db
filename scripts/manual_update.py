@@ -1,6 +1,6 @@
-from sports_hub import SportsHub
+from scs_hub import SportsHub
 
-# Reads SPORTS_HUB_CREDENTIALS or ~/.config/sports-hub-credentials.ini by default.
+# Reads SCS_HUB_CREDENTIALS or ~/.config/scs_hub_credentials.ini by default.
 hub = SportsHub('postgres')
 
 # Order is deliberate: nba's box scores take their game list from

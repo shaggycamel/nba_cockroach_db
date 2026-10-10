@@ -3,7 +3,7 @@
 Scheduled table updates for the NBA / fantasy database.
 
 `__main__.py` reads `util.update_schedule`, calls each row's `associated_function` on a
-[sports-hub](https://github.com/shaggycamel/sports-hub) `SportsHub`, writes one row per
+[scs-hub](https://github.com/shaggycamel/scs.scs_hub) `SportsHub`, writes one row per
 table to `util.update_log`, emails any failures, and exits non-zero if anything failed.
 
 ```
@@ -20,12 +20,12 @@ It runs as a Docker container, once per cron job, on a single always-on host (th
 
 ## Configuration
 
-Everything lives in one system-wide file, `~/.config/sports-hub-credentials.ini` — the same
-file sports-hub reads for its DB and platform credentials. Set `SPORTS_HUB_CREDENTIALS` to
-point at a different path instead; both `__main__.py` and sports-hub honour it. Create the
+Everything lives in one system-wide file, `~/.config/scs_hub_credentials.ini` — the same
+file scs-hub reads for its DB and platform credentials. Set `SCS_HUB_CREDENTIALS` to
+point at a different path instead; both `__main__.py` and scs-hub honour it. Create the
 file `chmod 600` and never commit it (it lives outside the repo).
 
-It holds the DB/platform sections sports-hub expects (`[cockroach]`/`[postgres]`,
+It holds the DB/platform sections scs-hub expects (`[cockroach]`/`[postgres]`,
 `[statyx]`, `[espn_api]`, `[yahoo_api]`) plus this repo's `[runtime]` and `[smtp]` sections.
 
 A direct `python __main__.py` reads the same file, so no `cd` or working-directory setup is
@@ -53,8 +53,8 @@ leave the box.
 ```bash
 # 1. one-off: the system-wide config file
 mkdir -p ~/.config
-$EDITOR ~/.config/sports-hub-credentials.ini   # real creds, db_con = cockroach
-chmod 600 ~/.config/sports-hub-credentials.ini
+$EDITOR ~/.config/scs_hub_credentials.ini   # real creds, db_con = cockroach
+chmod 600 ~/.config/scs_hub_credentials.ini
 
 # 2. build (repeat after every git pull)
 cd ~/git/nba_cockroach_db && git pull
@@ -65,7 +65,7 @@ docker build -t nba_cockroach_db:latest .
 ./cron.sh daily,6h         # only those cadences
 ```
 
-`cron.sh` bind-mounts the config read-only at `/root/.config/sports-hub-credentials.ini`,
+`cron.sh` bind-mounts the config read-only at `/root/.config/scs_hub_credentials.ini`,
 so nothing secret is in the image. It keeps the container after the run (no `--rm`) so
 `docker logs update_tables` works until the next run, and it propagates the exit status.
 
@@ -76,8 +76,8 @@ Crontab — cron has no `PATH`, which is why `cron.sh` sets one:
 0 */6 * * * /home/oli/github/nba_cockroach_db/cron.sh 6h >> /home/oli/github/nba_cockroach_db/cron.log 2>&1
 ```
 
-No environment setup needed — `cron.sh` reads `~/.config/sports-hub-credentials.ini` (or
-`SPORTS_HUB_CREDENTIALS`). The redirect captures the wrapper's output; the container's own
+No environment setup needed — `cron.sh` reads `~/.config/scs_hub_credentials.ini` (or
+`SCS_HUB_CREDENTIALS`). The redirect captures the wrapper's output; the container's own
 logs are also available via `docker logs update_tables` until the next run.
 
 Run frequency is otherwise driven from the database: `util.update_schedule.cadence`
@@ -87,16 +87,16 @@ every run (including a bare `./cron.sh`). The `cadence` column is mirrored in
 
 ## Notes on the image
 
-- Multi-stage. The build stage needs `build-essential` + `libpq-dev` because sports-hub
+- Multi-stage. The build stage needs `build-essential` + `libpq-dev` because scs-hub
   pins `psycopg2`, which publishes no Linux wheels and compiles from source.
 - Runtime needs `libpq5` (psycopg2), `tzdata` (`ZoneInfo('Pacific/Auckland')`) and
   `default-jre-headless` — `nbainjuries` starts a JVM via jpype at *import* time and
-  `sports_hub.nba` imports it at module top, so Java is needed on every run, not just
+  `scs_hub.nba` imports it at module top, so Java is needed on every run, not just
   injury runs.
 - `uv` is pinned to the version that generated `uv.lock`, and `uv sync --locked` fails the
   build if the lock drifts from `pyproject.toml`. Bump the two together.
 - The container runs as root on purpose: a non-root uid could not read the `chmod 600`
-  host config through the read-only bind mount, and `/root/.config` is where sports-hub
+  host config through the read-only bind mount, and `/root/.config` is where scs-hub
   resolves it by default.
 
 ## Development

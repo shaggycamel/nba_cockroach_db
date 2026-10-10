@@ -6,8 +6,8 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "polars>=1.44.1",
-    "sports-hub",
+    "scs-hub",
 ]
 
 [tool.uv.sources]
-sports-hub = { git = "https://github.com/shaggycamel/sports-hub.git" }
+scs-hub = { git = "https://github.com/shaggycamel/scs.scs_hub.git" }
