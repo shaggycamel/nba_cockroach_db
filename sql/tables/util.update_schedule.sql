@@ -14,7 +14,7 @@ ALTER TABLE util.update_schedule ADD COLUMN IF NOT EXISTS cadence TEXT;
 
 -- Assign per object, e.g.:
 -- UPDATE util.update_schedule SET cadence = 'daily';
--- UPDATE util.update_schedule SET cadence = '6h' WHERE table_name = 'nba_injuries';
+-- UPDATE util.update_schedule SET cadence = 'intraday' WHERE table_name = 'nba_injuries';
 
 -- Optional, once no row is left unassigned:
 -- ALTER TABLE util.update_schedule ALTER COLUMN cadence SET NOT NULL;

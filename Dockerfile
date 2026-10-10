@@ -46,5 +46,5 @@ ENV PATH="/app/.venv/bin:$PATH" \
 # The credentials file is NOT in the image: mount it at
 # /root/.config/scs_hub_credentials.ini (scs-hub and __main__.py both resolve it
 # there, since Path.home() is /root for the root user).
-# Exec form so `docker run <image> daily,6h` reaches __main__.py as argv[1].
+# Exec form so `docker run <image> daily,intraday` reaches __main__.py as argv[1].
 ENTRYPOINT ["python", "__main__.py"]

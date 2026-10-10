@@ -2,8 +2,8 @@
 
 Usage:
     python __main__.py                      # every table where pause IS FALSE
-    python __main__.py daily,6h             # only these cadences (alt-frequency runs)
-    python __main__.py daily 6h             # same; space- or comma-separated
+    python __main__.py daily,intraday       # only these cadences (alt-frequency runs)
+    python __main__.py daily intraday       # same; space- or comma-separated
     (interactive consoles: '-f <kernel file>' in argv is ignored)
 
 Configuration lives in the system-wide scs-hub credentials file (the same file
@@ -158,7 +158,7 @@ def main():
     # Optional cadence filters; '-f' is ignored (legacy interactive flag)
     # ipykernel (Positron/Jupyter consoles) passes '-f <connection file>' in argv;
     # drop the flag AND its value so the kernel file isn't read as a cadence.
-    # Cadences come space- or comma-separated ('daily,6h' == 'daily 6h'); a bare run
+    # Cadences come space- or comma-separated ('daily,intraday' == 'daily intraday'); a bare run
     # means every unpaused row.
     args, skip = [], False
     for a in sys.argv[1:]:

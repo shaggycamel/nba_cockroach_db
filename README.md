@@ -8,8 +8,8 @@ table to `util.update_log`, emails any failures, and exits non-zero if anything 
 
 ```
 python __main__.py                 # every table where pause IS FALSE
-python __main__.py daily,6h        # only rows whose cadence is one of these
-python __main__.py daily 6h        # same; space- or comma-separated
+python __main__.py daily,intraday  # only rows whose cadence is one of these
+python __main__.py daily intraday  # same; space- or comma-separated
 ```
 
 Each row's `cadence` names the run it belongs to: `./cron.sh daily` picks up every
@@ -62,7 +62,7 @@ docker build -t nba_cockroach_db:latest .
 
 # 3. run
 ./cron.sh                  # all unpaused tables
-./cron.sh daily,6h         # only those cadences
+./cron.sh daily,intraday   # only those cadences
 ```
 
 `cron.sh` bind-mounts the config read-only at `/root/.config/scs_hub_credentials.ini`,
@@ -72,8 +72,8 @@ so nothing secret is in the image. It keeps the container after the run (no `--r
 Crontab — cron has no `PATH`, which is why `cron.sh` sets one:
 
 ```cron
-0  3 * * *  /home/oli/github/nba_cockroach_db/cron.sh daily >> /home/oli/github/nba_cockroach_db/cron.log 2>&1
-0 */6 * * * /home/oli/github/nba_cockroach_db/cron.sh 6h >> /home/oli/github/nba_cockroach_db/cron.log 2>&1
+0  3 * * *  /home/oli/shaggy_camel_sports/nba/database/cron.sh daily    >> /home/oli/shaggy_camel_sports/nba/database/cron.log 2>&1
+0 */6 * * * /home/oli/shaggy_camel_sports/nba/database/cron.sh intraday >> /home/oli/shaggy_camel_sports/nba/database/cron.log 2>&1
 ```
 
 No environment setup needed — `cron.sh` reads `~/.config/scs_hub_credentials.ini` (or
