@@ -13,6 +13,8 @@
 
 export PATH=/usr/local/bin:/usr/bin:/bin
 
+echo "Running $(date '+%Y-%m-%d %H:%M:%S %Z')"
+
 # Built locally on this host (see README) -- no registry, so no pull.
 IMAGE_NAME='scs.nba.database:latest'
 CONTAINER_NAME='update_tables'
