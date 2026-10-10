@@ -1,5 +1,5 @@
 -- RETIRED 2026-10-07: this view was dropped from both cockroach and postgres. Nothing
--- consumes it: nba.shiny reads nba.team_roster_vw, nba.shiny.draft reads no roster view at
+-- consumes it: league reads nba.team_roster_vw, draft reads no roster view at
 -- all, and a grep of every repo under ~/git finds no other reference.
 -- This file is kept only as the surviving record of the definition -- DELETE IT if the view
 -- proves not to be useful.

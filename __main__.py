@@ -54,7 +54,7 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s %(levelname)s %(name)s: %(message)s',
 )
-log = logging.getLogger('nba_cockroach_db')
+log = logging.getLogger('scs.nba.database')
 
 NZ = ZoneInfo('Pacific/Auckland')
 

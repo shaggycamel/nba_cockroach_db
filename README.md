@@ -1,4 +1,4 @@
-# nba_cockroach_db
+# scs.nba.database
 
 Scheduled table updates for the NBA / fantasy database.
 
@@ -57,8 +57,8 @@ $EDITOR ~/.config/scs_hub_credentials.ini   # real creds, db_con = cockroach
 chmod 600 ~/.config/scs_hub_credentials.ini
 
 # 2. build (repeat after every git pull)
-cd ~/git/nba_cockroach_db && git pull
-docker build -t nba_cockroach_db:latest .
+cd ~/shaggy_camel_sports/nba/database && git pull
+docker build -t scs.nba.database:latest .
 
 # 3. run
 ./cron.sh                  # all unpaused tables
